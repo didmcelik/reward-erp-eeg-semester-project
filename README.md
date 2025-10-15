@@ -49,3 +49,12 @@ Extract the ZIP file and move the folder into your project:
     ```
     project/data/ds004147/
     ```
+
+### QC reports
+python notebooks/step07_qc_report.py
+# -> derivatives/qc/sub-XX_report.html + index.html
+
+### Robustness sweep (small subset)
+python notebooks/step08_robustness_sweep.py
+# -> derivatives/group/robustness.csv
+
