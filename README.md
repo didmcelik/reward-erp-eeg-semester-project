@@ -41,3 +41,11 @@ project/
 └── README.md
 
 ```
+## Dataset Download (ds004147)
+The dataset is publicly available on OpenNeuro:
+🔗 https://openneuro.org/datasets/ds004147
+
+Extract the ZIP file and move the folder into your project:
+    ```
+    project/data/ds004147/
+    ```
