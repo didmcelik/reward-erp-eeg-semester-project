@@ -1,0 +1,10 @@
+mne==1.10.2
+mne-bids==0.15
+mne-bids-pipeline==1.9
+autoreject
+pingouin
+numpy
+scipy
+pandas
+matplotlib
+scikit-learn

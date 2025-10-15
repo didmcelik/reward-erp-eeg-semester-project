@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.ipynb_checkpoints/
+.venv/
+env/
+venv/
+
+# MNE data outputs
+derivatives/
+*.fif
+*.set
+*.edf
+*.vhdr
+*.vmrk
+*.eeg
+
+# Datasets
+data/
+
+# System / IDE
+.DS_Store
+.idea/
+.vscode/
