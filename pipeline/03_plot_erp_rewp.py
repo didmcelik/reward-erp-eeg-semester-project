@@ -4,7 +4,7 @@
 From subject evokeds → plot Win/Loss at FCz, RewP topomap, and extract metrics.
 
 Usage:
-  python 03_plot_erp_rewp.py --sub 27 --root ./data/ds004147 --deriv ./data/ds004147/derivatives
+  python 03_plot_erp_rewp.py --sub 27 --root ../data/ds004147 --deriv ../data/ds004147/derivatives
 """
 
 from __future__ import annotations
