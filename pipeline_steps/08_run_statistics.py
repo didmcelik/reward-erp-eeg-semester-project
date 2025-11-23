@@ -79,7 +79,7 @@ def analyze_rewp_amplitudes(evokeds, subject_id):
                 print(f"    {condition_name}: Data range: {rewp_data.min():.3f} to {rewp_data.max():.3f} µV")
                 
                 # RewP amplitude (most negative for classic RewP)
-                rewp_amplitude = float(np.min(rewp_data))  # Most negative
+                rewp_amplitude = float(np.max(rewp_data))  # Most negative
                 
                 # Mean voltage in window
                 mean_amplitude = float(np.mean(rewp_data))
@@ -175,18 +175,19 @@ def run_simple_statistics(evokeds):
     
     # Test each condition against zero at peak time
     for condition, evoked in evokeds.items():
+        evoked_data_uv = evoked.data * 1e6  # Convert to µV
         # Find peak amplitude
-        peak_idx = np.unravel_index(np.argmax(np.abs(evoked.data)), evoked.data.shape)
+        peak_idx = np.unravel_index(np.argmax(np.abs(evoked_data_uv)), evoked_data_uv.shape)
         peak_channel = evoked.ch_names[peak_idx[0]]
         peak_time = evoked.times[peak_idx[1]]
-        peak_amplitude = evoked.data[peak_idx]
+        peak_amplitude = evoked_data_uv[peak_idx]
         
         stats_results[condition] = {
             'peak_channel': peak_channel,
             'peak_time': peak_time,
             'peak_amplitude': peak_amplitude,
-            'mean_amplitude': np.mean(evoked.data),
-            'std_amplitude': np.std(evoked.data)
+            'mean_amplitude': np.mean(evoked_data_uv),
+            'std_amplitude': np.std(evoked_data_uv)
         }
         
         print(f"  {condition}: peak={peak_amplitude:.2f}µV at {peak_time:.3f}s ({peak_channel})")
