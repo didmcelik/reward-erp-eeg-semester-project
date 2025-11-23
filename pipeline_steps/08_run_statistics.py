@@ -87,7 +87,7 @@ def analyze_rewp_amplitudes(evokeds, subject_id):
                 rewp_results[condition_name] = {
                     'rewp_amplitude': rewp_amplitude,
                     'mean_amplitude': mean_amplitude,
-                    'peak_time': diff_evoked.times[time_mask][np.argmin(rewp_data)]
+                    'peak_time': diff_evoked.times[time_mask][np.argmax(rewp_data)]
                 }
                 
                 print(f"  {condition_name}: RewP = {rewp_amplitude:.2f} µV, Mean = {mean_amplitude:.2f} µV")
