@@ -69,7 +69,18 @@ def create_epochs(raw):
     )
     
     print(f"Created {len(epochs)} epochs")
-    print(f"Dropped {epochs.drop_log_stats()['n_dropped_total']} epochs due to artifacts")
+
+    try:
+        drop_stats = epochs.drop_log_stats()
+        if isinstance(drop_stats, dict):
+            n_dropped = drop_stats.get('n_dropped_total', 0)
+        else:
+            n_dropped = drop_stats  # If it's a scalar
+        print(f"Dropped {n_dropped} epochs due to artifacts")
+    except Exception as e:
+        # Fallback: count manually
+        n_dropped = sum(len(log) > 0 for log in epochs.drop_log)
+        print(f"Dropped {n_dropped} epochs due to artifacts (manual count)")
     
     # Print epoch counts per condition
     for condition in epochs.event_id:
@@ -77,6 +88,39 @@ def create_epochs(raw):
         print(f"  {condition}: {n_epochs} trials")
     
     return epochs, events, new_event_id
+
+
+def create_epoch_overview_plot(epochs, subject_dir, subject_id):
+    """Create a simple overview plot of epochs"""
+    
+    try:
+        # Plot first few epochs for visualization
+        fig, axes = plt.subplots(2, 1, figsize=(12, 8))
+        
+        # Plot epoch count per condition
+        conditions = list(epochs.event_id.keys())
+        counts = [len(epochs[cond]) for cond in conditions]
+        
+        axes[0].bar(range(len(conditions)), counts)
+        axes[0].set_xticks(range(len(conditions)))
+        axes[0].set_xticklabels(conditions, rotation=45, ha='right')
+        axes[0].set_ylabel('Number of Epochs')
+        axes[0].set_title(f'Sub-{subject_id} Epoch Counts per Condition')
+        axes[0].grid(True, alpha=0.3)
+        
+        # Plot average across all epochs
+        if len(epochs) > 0:
+            grand_avg = epochs.average()
+            grand_avg.plot(axes=axes[1], show=False, titles='Grand Average')
+            axes[1].set_title('Grand Average ERP')
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(subject_dir, 'epoch_overview.png'), dpi=300)
+        plt.close()
+        
+    except Exception as e:
+        print(f"Could not create epoch overview plot: {e}")
+
 
 def visualize_epochs(epochs, events, raw, subject_id, output_dir):
     """Visualize epoch creation results"""
@@ -111,10 +155,7 @@ def visualize_epochs(epochs, events, raw, subject_id, output_dir):
     plt.savefig(os.path.join(subject_dir, 'average_erps_preview.png'), dpi=300)
     plt.close()
     
-    # Plot epoch variance
-    fig = epochs.plot_image(combine='mean', show=False)
-    fig.savefig(os.path.join(subject_dir, 'epoch_image.png'), dpi=300)
-    plt.close()
+    create_epoch_overview_plot(epochs, subject_dir, subject_id)
     
     print(f"Epoching visualizations saved to: {subject_dir}")
 
@@ -157,4 +198,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
