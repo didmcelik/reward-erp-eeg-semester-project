@@ -89,29 +89,44 @@ def visualize_rejection(epochs, epochs_clean, reject_log, ar, subject_id, output
     plt.close()
     
     # Plot before/after comparison
-    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
     
-    # Original data - butterfly plot
-    epochs.average().plot(axes=axes[0,0], show=False, titles='Original - Butterfly')
+    # Original data
+    epochs.average().plot(axes=axes[0], show=False, titles='Original - Butterfly')
     
-    # Clean data - butterfly plot  
-    epochs_clean.average().plot(axes=axes[0,1], show=False, titles='Clean - Butterfly')
-    
-    # Original data - image plot
-    epochs.plot_image(combine='mean', axes=axes[1,0], show=False, title='Original - Image')
-    
-    # Clean data - image plot
-    epochs_clean.plot_image(combine='mean', axes=axes[1,1], show=False, title='Clean - Image')
+    # Clean data 
+    epochs_clean.average().plot(axes=axes[1], show=False, titles='Clean - Butterfly')
     
     plt.tight_layout()
-    fig.suptitle(f'Sub-{subject_id} Before/After AutoReject', y=1.02)
-    plt.savefig(os.path.join(subject_dir, 'before_after_comparison.png'), dpi=300)
+    fig.suptitle(f'Sub-{subject_id} Before/After AutoReject - ERPs', y=1.02)
+    plt.savefig(os.path.join(subject_dir, 'before_after_erp_comparison.png'), dpi=300)
     plt.close()
+
+    # Original data - image plot
+    try:
+        fig1 = epochs.plot_image(combine='mean', show=False, title='Original Data')
+        fig1.suptitle(f'Sub-{subject_id} Original Epochs')
+        fig1.savefig(os.path.join(subject_dir, 'original_epochs_image.png'), dpi=300)
+        plt.close(fig1)
+    except Exception as e:
+        print(f"Could not create original epochs image: {e}")
+    
+    # Clean data - image plot
+    try:
+        fig2 = epochs_clean.plot_image(combine='mean', show=False, title='Clean Data')
+        fig2.suptitle(f'Sub-{subject_id} Clean Epochs') 
+        fig2.savefig(os.path.join(subject_dir, 'clean_epochs_image.png'), dpi=300)
+        plt.close(fig2)
+    except Exception as e:
+        print(f"Could not create clean epochs image: {e}")
     
     # Plot rejection thresholds
-    fig = ar.plot_reject_log(show=False)
-    fig.savefig(os.path.join(subject_dir, 'rejection_thresholds.png'), dpi=300)
-    plt.close()
+    try:
+        fig = ar.plot_reject_log(show=False)
+        fig.savefig(os.path.join(subject_dir, 'rejection_thresholds.png'), dpi=300)
+        plt.close(fig)
+    except Exception as e:
+        print(f"Could not create rejection thresholds plot: {e}")
     
     # Plot trial counts per condition
     conditions = list(epochs.event_id.keys())
@@ -143,7 +158,37 @@ def visualize_rejection(epochs, epochs_clean, reject_log, ar, subject_id, output
     plt.savefig(os.path.join(subject_dir, 'trial_counts_comparison.png'), dpi=300)
     plt.close()
     
+    create_simple_comparison_plot(epochs, epochs_clean, subject_dir, subject_id)
+    
     print(f"Rejection visualizations saved to: {subject_dir}")
+
+def create_simple_comparison_plot(epochs, epochs_clean, subject_dir, subject_id):
+    """Create a simple comparison plot without complex subplots"""
+    
+    try:
+        # Create a 2x2 comparison using averages
+        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+        
+        # Plot 1: Original average at FCz
+        epochs.average().plot_topo(axes=axes[0,0], show=False, title='Original - Topo')
+        
+        # Plot 2: Clean average at FCz  
+        epochs_clean.average().plot_topo(axes=axes[0,1], show=False, title='Clean - Topo')
+        
+        # Plot 3: Original average butterfly
+        epochs.average().plot(axes=axes[1,0], show=False, titles='Original - All Channels')
+        
+        # Plot 4: Clean average butterfly
+        epochs_clean.average().plot(axes=axes[1,1], show=False, titles='Clean - All Channels')
+        
+        plt.tight_layout()
+        fig.suptitle(f'Sub-{subject_id} Before/After AutoReject - Detailed Comparison', y=1.02)
+        plt.savefig(os.path.join(subject_dir, 'detailed_comparison.png'), dpi=300)
+        plt.close()
+        
+    except Exception as e:
+        print(f"Could not create simple comparison plot: {e}")
+
 
 def save_clean_epochs(epochs_clean, reject_log, ar, subject_id, output_dir):
     """Save clean epochs and rejection info"""

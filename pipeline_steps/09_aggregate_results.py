@@ -158,15 +158,29 @@ def create_group_visualizations(grand_averages, df_stats, output_dir):
                 loss_cond = f'{level}_loss'
                 
                 if win_cond in grand_averages and loss_cond in grand_averages and i < 4:
-                    # Plot both conditions on same axes
-                    grand_averages[win_cond].plot(axes=axes[i], show=False, 
-                                                titles=f'{level}: Win vs Loss')
-                    grand_averages[loss_cond].plot(axes=axes[i], show=False, 
-                                                 color='red', linestyle='--')
-                    axes[i].legend(['Win', 'Loss'])
+                    # FIXED: Plot manually to control colors and styles
+                    win_evoked = grand_averages[win_cond]
+                    loss_evoked = grand_averages[loss_cond]
+                    
+                    # Plot win condition (blue, solid line)
+                    for ch_idx, ch_name in enumerate(win_evoked.ch_names):
+                        if ch_name == 'FCz':  # Focus on FCz for clarity
+                            axes[i].plot(win_evoked.times, win_evoked.data[ch_idx], 
+                                       color='blue', linewidth=2, label='Win')
+                            axes[i].plot(loss_evoked.times, loss_evoked.data[ch_idx], 
+                                       color='red', linewidth=2, linestyle='--', label='Loss')
+                            break
+                    
+                    axes[i].set_xlabel('Time (s)')
+                    axes[i].set_ylabel('Amplitude (µV)')
+                    axes[i].set_title(f'{level.replace("_", " ").title()}: Win vs Loss (FCz)')
+                    axes[i].legend()
+                    axes[i].grid(True, alpha=0.3)
+                    axes[i].axhline(0, color='black', linewidth=0.5)
+                    axes[i].axvline(0, color='black', linewidth=0.5)
             
             plt.tight_layout()
-            fig.suptitle('Group Comparison: Win vs Loss by Task Level', y=1.02)
+            fig.suptitle('Group Comparison: Win vs Loss by Task Level (FCz electrode)', y=1.02)
             plt.savefig(os.path.join(group_dir, 'win_vs_loss_comparison.png'), dpi=300)
             plt.close()
     
@@ -298,4 +312,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    

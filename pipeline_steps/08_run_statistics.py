@@ -107,10 +107,18 @@ def run_permutation_cluster_tests(epochs, contrasts, subject_id):
             data1 = epochs[cond1].get_data()  # Shape: (n_epochs, n_channels, n_times)
             data2 = epochs[cond2].get_data()
             
-            # Calculate difference for each trial
-            diff_data = data1 - data2  # Paired difference
+            min_trials = min(data1.shape[0], data2.shape[0])
             
-            if len(diff_data) > 5:  # Need sufficient trials
+            if min_trials > 5:  # Need sufficient trials
+                # Take first min_trials from each condition for paired comparison
+                data1_matched = data1[:min_trials]
+                data2_matched = data2[:min_trials]
+                
+                # Calculate difference for each trial (now they have same shape)
+                diff_data = data1_matched - data2_matched  # Paired difference
+                
+                print(f"    Using {min_trials} matched trials for comparison")
+                
                 # Run one-sample t-test against zero (paired comparison)
                 T_obs, clusters, cluster_p_values, H0 = permutation_cluster_1samp_test(
                     diff_data, 
@@ -129,22 +137,23 @@ def run_permutation_cluster_tests(epochs, contrasts, subject_id):
                     'cluster_p_values': cluster_p_values,
                     'H0': H0,
                     'diff_data': diff_data,
-                    'n_trials': len(diff_data)
+                    'n_trials': min_trials
                 }
                 
                 # Print significant clusters
                 sig_clusters = np.where(cluster_p_values < 0.05)[0]
-                print(f"    Trials: {len(diff_data)}")
+                print(f"    Matched trials used: {min_trials}")
                 print(f"    Significant clusters: {len(sig_clusters)}")
                 
                 for i, cluster_idx in enumerate(sig_clusters):
                     p_val = cluster_p_values[cluster_idx]
                     cluster_mask = clusters[cluster_idx]
                     cluster_times = epochs.times[cluster_mask.any(axis=0)]
-                    print(f"      Cluster {i+1}: p={p_val:.4f}, "
-                          f"time={cluster_times[0]:.3f}-{cluster_times[-1]:.3f}s")
+                    if len(cluster_times) > 0:
+                        print(f"      Cluster {i+1}: p={p_val:.4f}, "
+                              f"time={cluster_times[0]:.3f}-{cluster_times[-1]:.3f}s")
             else:
-                print(f"    Insufficient trials ({len(diff_data)})")
+                print(f"    Insufficient trials ({min_trials})")
                 results[f"{cond1}_vs_{cond2}"] = None
         else:
             print(f"\n  Skipping {cond1} vs {cond2}: missing conditions")

@@ -56,7 +56,7 @@ def create_contrast_evoked(evokeds):
     # Define contrast pairs
     contrast_pairs = [
         ('low_task_win', 'low_task_loss', 'low_win_rewp'),
-        ('mid_low_task_win', 'mid_low_task_loss', 'mid_low_rewps'),
+        ('mid_low_task_win', 'mid_low_task_loss', 'mid_low_rewp'),
         ('mid_high_task_win', 'mid_high_task_loss', 'mid_high_rewp'),
         ('high_task_win', 'high_task_loss', 'high_rewp')
     ]
@@ -110,8 +110,8 @@ def create_study_replication_plots(evokeds, contrasts, subject_id, subject_dir):
     
     # Plot RewP difference waves (similar to Figure 3c)
     rewp_conditions = [
-        ('mid_high_win_minus_loss', 'Mid-Task High-Cue'),
-        ('high_win_minus_loss', 'High-Task')
+        ('mid_high_rewp', 'Mid-Task High-Cue'),
+        ('high_rewp', 'High-Task')
     ]
     
     for cond, label in rewp_conditions:
@@ -180,8 +180,8 @@ def visualize_evoked(evokeds, contrasts, subject_id, output_dir):
         
         for i, time_point in enumerate(time_points):
             representative_evoked.plot_topomap(times=time_point, axes=axes[i], 
-                                             show=False, colorbar=False,
-                                             title=f'{time_point*1000:.0f} ms')
+                                             show=False, colorbar=False)
+            axes[i].set_title(f'{time_point*1000:.0f} ms')
         
         plt.tight_layout()
         fig.suptitle(f'Sub-{subject_id} Topography Over Time', y=1.1)
