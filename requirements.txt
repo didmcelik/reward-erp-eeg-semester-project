@@ -8,3 +8,5 @@ scipy
 pandas
 matplotlib
 scikit-learn
+meegkit
+mne_icalabel

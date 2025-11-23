@@ -1,5 +1,18 @@
 # 🧩 EEG Semester Project — ds004147 (Reward ERP / RewP)
 
+# To run the complete pipeline:
+cd pipeline_steps
+python master_script.py
+
+# Or run individual steps:
+
+python 01_fetch_data.py --subject 27
+python 02_set_montage.py --subject 27
+
+etc.
+
+
+
 ## 📂 Dataset setup
 1. Download the **ds004147** dataset from [OpenNeuro](https://openneuro.org/datasets/ds004147).
 2. Place it under the project directory:
