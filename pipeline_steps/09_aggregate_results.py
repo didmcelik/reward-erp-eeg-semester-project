@@ -138,11 +138,11 @@ def create_figure_3a(grand_averages, output_dir):
     # Define colors and styles matching the study
     colors = {
         'low_low': '#FF6B6B',      # Light red for low-low
-        'mid_low': '#4ECDC4',      # Teal for mid-low  
-        'mid_high': '#45B7D1',     # Blue for mid-high
-        'high_high': '#96CEB4'     # Green for high-high
+        'mid_low': '#66B2FF',      # Light blue for mid-low  
+        'mid_high': '#FF6666',     # Red for mid-high
+        'high_high': '#3366FF'     # Blue for high-high
     }
-    
+
     line_styles = {'win': '-', 'loss': '--'}
     
     # Plot conditions matching study design
@@ -162,9 +162,9 @@ def create_figure_3a(grand_averages, output_dir):
             if 'FCz' in win_evoked.ch_names:
                 ch_idx = win_evoked.ch_names.index('FCz')
                 
-                # Convert to µV
-                win_data = win_evoked.data[ch_idx] * 1e6
-                loss_data = loss_evoked.data[ch_idx] * 1e6
+                # Conversion to µV
+                win_data = win_evoked.data[ch_idx] * 1e6  # Convert to µV
+                loss_data = loss_evoked.data[ch_idx] * 1e6  # Convert to µV
                 times = win_evoked.times
                 
                 # Plot win and loss
@@ -175,7 +175,7 @@ def create_figure_3a(grand_averages, output_dir):
                        linestyle=line_styles['loss'], linewidth=2,
                        label=f'{label} Loss')
     
-    # Formatting to match study
+    # Formatting to match study exactly
     ax.set_xlabel('Time (s)', fontsize=12)
     ax.set_ylabel('Voltage (µV)', fontsize=12)
     ax.set_title('FCz', fontsize=14, fontweight='bold')
@@ -183,6 +183,8 @@ def create_figure_3a(grand_averages, output_dir):
     ax.axvline(0, color='black', linewidth=0.5)
     ax.grid(True, alpha=0.3)
     ax.set_xlim(-0.2, 0.6)
+    
+    # Add legend in style of study
     ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
     
     plt.tight_layout()
