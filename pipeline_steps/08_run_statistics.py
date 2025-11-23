@@ -56,10 +56,10 @@ def analyze_rewp_amplitudes(evokeds, subject_id):
     
     # Calculate RewP for each condition
     conditions = [
-        ('low_task_low_cue', 'low_task_win', 'low_task_loss'),
-        ('mid_task_low_cue', 'mid_low_task_win', 'mid_low_task_loss'),
-        ('mid_task_high_cue', 'mid_high_task_win', 'mid_high_task_loss'),
-        ('high_task_low_cue', 'high_task_win', 'high_task_loss')
+        ('low_task', 'low_task_win', 'low_task_loss'),
+        ('mid_low_task', 'mid_low_task_win', 'mid_low_task_loss'),
+        ('mid_high_task', 'mid_high_task_win', 'mid_high_task_loss'),
+        ('high_task', 'high_task_win', 'high_task_loss')
     ]
     
     for condition_name, win_cond, loss_cond in conditions:
@@ -73,21 +73,26 @@ def analyze_rewp_amplitudes(evokeds, subject_id):
                 
                 # Extract data in time window
                 time_mask = (diff_evoked.times >= time_window[0]) & (diff_evoked.times <= time_window[1])
-                rewp_data = diff_evoked.data[ch_idx, time_mask]
+                rewp_data = diff_evoked.data[ch_idx, time_mask] * 1e6  # Convert to µV
                 
-                # RewP amplitude (max voltage in window)
-                rewp_amplitude = np.max(rewp_data)
+                # Debug print
+                print(f"    {condition_name}: Data range: {rewp_data.min():.3f} to {rewp_data.max():.3f} µV")
                 
-                # Mean voltage in window (for completeness)
-                mean_amplitude = np.mean(rewp_data)
+                # RewP amplitude (most negative for classic RewP)
+                rewp_amplitude = float(np.min(rewp_data))  # Most negative
+                
+                # Mean voltage in window
+                mean_amplitude = float(np.mean(rewp_data))
                 
                 rewp_results[condition_name] = {
                     'rewp_amplitude': rewp_amplitude,
                     'mean_amplitude': mean_amplitude,
-                    'peak_time': diff_evoked.times[time_mask][np.argmax(rewp_data)]
+                    'peak_time': diff_evoked.times[time_mask][np.argmin(rewp_data)]
                 }
                 
                 print(f"  {condition_name}: RewP = {rewp_amplitude:.2f} µV, Mean = {mean_amplitude:.2f} µV")
+            else:
+                print(f"    {electrode} not found in {condition_name}")
     
     return rewp_results
 
