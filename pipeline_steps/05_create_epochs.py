@@ -64,11 +64,15 @@ def create_epochs(raw):
         raw, events, new_event_id,
         tmin=EPOCHS_TMIN, tmax=EPOCHS_TMAX,
         baseline=BASELINE,
-        reject={'eeg': 150e-6},  # Peak-to-peak amplitude rejection
+        reject={'eeg': 100e-6},  # Peak-to-peak amplitude rejection
+        flat={'eeg': 1e-6},    # Flat signal rejection
         preload=True
     )
     
     print(f"Created {len(epochs)} epochs")
+
+    print("Applying gradient-based rejection (study criterion: 40 µV/sample)...")
+    epochs = apply_gradient_rejection(epochs, threshold=40e-6)
 
     try:
         drop_stats = epochs.drop_log_stats()
@@ -88,6 +92,31 @@ def create_epochs(raw):
         print(f"  {condition}: {n_epochs} trials")
     
     return epochs, events, new_event_id
+
+
+def apply_gradient_rejection(epochs, threshold=40e-6):
+    """Apply gradient-based artifact rejection (study criterion)"""
+    
+    print(f"Applying gradient rejection with threshold: {threshold*1e6:.0f} µV/sample")
+    
+    data = epochs.get_data()  # Shape: (n_epochs, n_channels, n_times)
+    
+    # Calculate gradient (difference between consecutive samples)
+    gradient = np.abs(np.diff(data, axis=2))  # Shape: (n_epochs, n_channels, n_times-1)
+    
+    # Find epochs that exceed gradient threshold
+    max_gradient_per_epoch = np.max(gradient, axis=(1, 2))  # Max gradient per epoch
+    bad_epochs = max_gradient_per_epoch > threshold
+    
+    n_gradient_rejected = np.sum(bad_epochs)
+    print(f"Gradient rejection: {n_gradient_rejected} epochs exceed {threshold*1e6:.0f} µV/sample")
+    
+    if n_gradient_rejected > 0:
+        # Drop bad epochs
+        epochs.drop(np.where(bad_epochs)[0], reason='GRADIENT')
+        print(f"Remaining epochs after gradient rejection: {len(epochs)}")
+    
+    return epochs
 
 
 def create_epoch_overview_plot(epochs, subject_dir, subject_id):
