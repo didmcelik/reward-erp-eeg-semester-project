@@ -108,6 +108,267 @@ def aggregate_statistics(subjects):
     else:
         print("  No statistics found")
         return None
+    
+
+def create_study_replication_plots(grand_averages, df_stats, output_dir):
+    """Create plots matching Figure 3 from the study"""
+    
+    group_dir = os.path.join(output_dir, 'group_analysis')
+    os.makedirs(group_dir, exist_ok=True)
+    
+    print("Creating study replication plots (Figure 3 style)...")
+    
+    # Figure 3a: Win/loss waveforms by task and cue value
+    create_figure_3a(grand_averages, group_dir)
+    
+    # Figure 3b: Scalp distribution of win-loss difference
+    create_figure_3b(grand_averages, group_dir)
+    
+    # Figure 3c: Difference waveforms (RewP)
+    create_figure_3c(grand_averages, group_dir)
+    
+    # Figure 3d: RewP scores by condition
+    create_figure_3d(df_stats, group_dir)
+
+def create_figure_3a(grand_averages, output_dir):
+    """Create Figure 3a: Win/loss waveforms by task and cue value"""
+    
+    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+    
+    # Define colors and styles matching the study
+    colors = {
+        'low_low': '#FF6B6B',      # Light red for low-low
+        'mid_low': '#4ECDC4',      # Teal for mid-low  
+        'mid_high': '#45B7D1',     # Blue for mid-high
+        'high_high': '#96CEB4'     # Green for high-high
+    }
+    
+    line_styles = {'win': '-', 'loss': '--'}
+    
+    # Plot conditions matching study design
+    conditions_to_plot = [
+        ('low_task_win', 'low_task_loss', 'low_low', 'Low-Low'),
+        ('mid_low_task_win', 'mid_low_task_loss', 'mid_low', 'Mid-Low'),
+        ('mid_high_task_win', 'mid_high_task_loss', 'mid_high', 'Mid-High'),
+        ('high_task_win', 'high_task_loss', 'high_high', 'High-High')
+    ]
+    
+    for win_cond, loss_cond, color_key, label in conditions_to_plot:
+        if win_cond in grand_averages and loss_cond in grand_averages:
+            win_evoked = grand_averages[win_cond]
+            loss_evoked = grand_averages[loss_cond]
+            
+            # Get FCz data
+            if 'FCz' in win_evoked.ch_names:
+                ch_idx = win_evoked.ch_names.index('FCz')
+                
+                # Convert to µV
+                win_data = win_evoked.data[ch_idx] * 1e6
+                loss_data = loss_evoked.data[ch_idx] * 1e6
+                times = win_evoked.times
+                
+                # Plot win and loss
+                ax.plot(times, win_data, color=colors[color_key], 
+                       linestyle=line_styles['win'], linewidth=2, 
+                       label=f'{label} Win')
+                ax.plot(times, loss_data, color=colors[color_key], 
+                       linestyle=line_styles['loss'], linewidth=2,
+                       label=f'{label} Loss')
+    
+    # Formatting to match study
+    ax.set_xlabel('Time (s)', fontsize=12)
+    ax.set_ylabel('Voltage (µV)', fontsize=12)
+    ax.set_title('FCz', fontsize=14, fontweight='bold')
+    ax.axhline(0, color='black', linewidth=0.5)
+    ax.axvline(0, color='black', linewidth=0.5)
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(-0.2, 0.6)
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'figure_3a_win_loss_waveforms.png'), 
+                dpi=300, bbox_inches='tight')
+    plt.close()
+
+def create_figure_3b(grand_averages, output_dir):
+    """Create Figure 3b: Scalp distribution of win-loss difference"""
+    
+    # Calculate grand average difference wave across all conditions
+    all_diff_evokeds = []
+    
+    contrast_pairs = [
+        ('low_task_win', 'low_task_loss'),
+        ('mid_low_task_win', 'mid_low_task_loss'),
+        ('mid_high_task_win', 'mid_high_task_loss'),
+        ('high_task_win', 'high_task_loss')
+    ]
+    
+    for win_cond, loss_cond in contrast_pairs:
+        if win_cond in grand_averages and loss_cond in grand_averages:
+            diff_evoked = mne.combine_evoked([grand_averages[win_cond], 
+                                            grand_averages[loss_cond]], 
+                                           weights=[1, -1])
+            all_diff_evokeds.append(diff_evoked)
+    
+    if all_diff_evokeds:
+        # Average across all difference waves
+        grand_diff = mne.grand_average(all_diff_evokeds)
+        
+        # Create topography plot for RewP window (240-340ms)
+        fig = grand_diff.plot_topomap(times=[0.29], # Peak of RewP window
+                                     show=False, 
+                                     cmap='RdBu_r',
+                                     size=4)
+        fig.suptitle('Win-Loss Difference', fontsize=14, fontweight='bold')
+        plt.savefig(os.path.join(output_dir, 'figure_3b_scalp_topography.png'), 
+                    dpi=300, bbox_inches='tight')
+        plt.close()
+
+def create_figure_3c(grand_averages, output_dir):
+    """Create Figure 3c: Difference waveforms (RewP)"""
+    
+    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+    
+    # Define colors for difference waves
+    colors = {
+        'low_task': '#E74C3C',      # Red
+        'mid_low_task': '#3498DB',  # Blue  
+        'mid_high_task': '#9B59B6', # Purple
+        'high_task': '#2ECC71'      # Green
+    }
+    
+    # Create and plot difference waves
+    contrast_pairs = [
+        ('low_task_win', 'low_task_loss', 'low_task', 'Low Task, Low Cue'),
+        ('mid_low_task_win', 'mid_low_task_loss', 'mid_low_task', 'Mid Task, Low Cue'),
+        ('mid_high_task_win', 'mid_high_task_loss', 'mid_high_task', 'Mid Task, High Cue'),
+        ('high_task_win', 'high_task_loss', 'high_task', 'High Task, High Cue')
+    ]
+    
+    for win_cond, loss_cond, color_key, label in contrast_pairs:
+        if win_cond in grand_averages and loss_cond in grand_averages:
+            # Create difference wave
+            diff_evoked = mne.combine_evoked([grand_averages[win_cond], 
+                                            grand_averages[loss_cond]], 
+                                           weights=[1, -1])
+            
+            # Get FCz data
+            if 'FCz' in diff_evoked.ch_names:
+                ch_idx = diff_evoked.ch_names.index('FCz')
+                diff_data = diff_evoked.data[ch_idx] * 1e6  # Convert to µV
+                times = diff_evoked.times
+                
+                # Plot difference wave
+                ax.plot(times, diff_data, color=colors[color_key], 
+                       linewidth=3, label=label)
+    
+    # Add shaded region for analysis window (240-340ms)
+    ax.axvspan(0.240, 0.340, alpha=0.2, color='gray', 
+               label='Analysis Window (240-340ms)')
+    
+    # Formatting
+    ax.set_xlabel('Time (s)', fontsize=12)
+    ax.set_ylabel('Voltage (µV)', fontsize=12)
+    ax.set_title('FCz', fontsize=14, fontweight='bold')
+    ax.axhline(0, color='black', linewidth=0.5)
+    ax.axvline(0, color='black', linewidth=0.5)
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(-0.2, 0.6)
+    ax.set_ylim(-10, 10)
+    ax.legend(fontsize=10)
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'figure_3c_difference_waveforms.png'), 
+                dpi=300, bbox_inches='tight')
+    plt.close()
+
+def create_figure_3d(df_stats, output_dir):
+    """Create Figure 3d: RewP scores by condition"""
+    
+    if df_stats is None or len(df_stats) == 0:
+        print("No statistics available for Figure 3d")
+        return
+    
+    # Load RewP results for proper values
+    rewp_data = load_rewp_results(df_stats)
+    
+    if not rewp_data:
+        print("No RewP data available")
+        return
+    
+    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+    
+    # Prepare data for plotting
+    conditions = ['Low-Low', 'Mid-Low', 'Mid-High', 'High-High']
+    rewp_values = []
+    
+    # Extract RewP values (you'll need to modify this based on your data structure)
+    condition_mapping = {
+        'Low-Low': 'low_task',
+        'Mid-Low': 'mid_low_task', 
+        'Mid-High': 'mid_high_task',
+        'High-High': 'high_task'
+    }
+    
+    for condition in conditions:
+        key = condition_mapping.get(condition)
+        if key in rewp_data:
+            rewp_values.append(abs(rewp_data[key]))  # Use absolute value for display
+        else:
+            rewp_values.append(0)
+    
+    # Create box plot
+    x_pos = np.arange(len(conditions))
+    
+    # Plot bars (since you have single subject, show as bars with individual points)
+    bars = ax.bar(x_pos, rewp_values, alpha=0.7, color=['#E74C3C', '#3498DB', '#9B59B6', '#2ECC71'])
+    
+    # Add individual data points (dots for each subject)
+    for i, value in enumerate(rewp_values):
+        ax.scatter(i, value, color='black', s=50, zorder=10)
+    
+    # Formatting
+    ax.set_xlabel('Task-Cue Combination', fontsize=12)
+    ax.set_ylabel('Voltage (µV)', fontsize=12)
+    ax.set_title('RewP Amplitude by Condition', fontsize=14)
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(conditions, rotation=45, ha='right')
+    ax.grid(True, alpha=0.3, axis='y')
+    ax.set_ylim(0, max(rewp_values) * 1.2 if rewp_values else 10)
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'figure_3d_rewp_scores.png'), 
+                dpi=300, bbox_inches='tight')
+    plt.close()
+
+def load_rewp_results(df_stats):
+    """Load RewP results from statistics files"""
+    
+    rewp_data = {}
+    
+    # Try to load from the first subject's RewP results
+    if len(df_stats) > 0:
+        subject = df_stats.iloc[0]['subject']
+        rewp_file = os.path.join(OUTPUT_DIR, f'sub-{subject}', 'step08_statistics', 
+                                f'sub-{subject}_rewp_results.txt')
+        
+        if os.path.exists(rewp_file):
+            with open(rewp_file, 'r') as f:
+                lines = f.readlines()
+            
+            for line in lines:
+                if ':' in line and 'RewP' in line:
+                    parts = line.strip().split(':')
+                    if len(parts) >= 2:
+                        condition = parts[0].strip()
+                        try:
+                            value = float(parts[1].split('µV')[0].strip())
+                            rewp_data[condition] = value
+                        except:
+                            pass
+    
+    return rewp_data
+
 
 def create_group_visualizations(grand_averages, df_stats, output_dir):
     """Create group-level visualizations"""
@@ -228,6 +489,8 @@ def create_group_visualizations(grand_averages, df_stats, output_dir):
         summary_file = os.path.join(group_dir, 'group_summary_statistics.csv')
         summary_stats.to_csv(summary_file)
         print(f"  Summary statistics saved to: {summary_file}")
+
+    create_study_replication_plots(grand_averages, df_stats, output_dir)
     
     print(f"Group visualizations saved to: {group_dir}")
 
