@@ -39,9 +39,9 @@ def visualize_raw_data(raw, subject_id, output_dir):
     os.makedirs(subject_dir, exist_ok=True)
     
     # Plot data overview
-    fig = raw.plot(duration=10, n_channels=30, scalings='auto', 
+    fig = raw.plot(duration=10, n_channels=30,
                    title=f'Sub-{subject_id} Raw Data Overview', show=False)
-    fig.savefig(os.path.join(subject_dir, 'raw_data_overview.png'), dpi=300)
+    fig.savefig(os.path.join(subject_dir, 'raw_data_overview.png'))
     plt.close(fig)
     
     # Plot power spectral density

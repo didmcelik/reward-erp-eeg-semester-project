@@ -79,15 +79,13 @@ def apply_zapline_filter(raw, line_freq=50.0, nremove=4):
 def apply_rereferencing(raw):
     """Apply re-referencing to mastoids (TP9, TP10)"""
     
-    # Check if mastoid channels are available
+    # mastoid channels
     mastoids = ['TP9', 'TP10']
     available_mastoids = [ch for ch in mastoids if ch in raw.ch_names]
+    apply_mastoids = False
     
-    if len(available_mastoids) == 2:
+    if apply_mastoids:
         print(f"Re-referencing to mastoids: {available_mastoids}")
-        raw.set_eeg_reference(ref_channels=available_mastoids)
-    elif len(available_mastoids) == 1:
-        print(f"Only one mastoid available ({available_mastoids[0]}), using as reference")
         raw.set_eeg_reference(ref_channels=available_mastoids)
     else:
         print("No mastoid channels found, using common average reference")
@@ -110,6 +108,10 @@ def apply_filters(raw):
     # Apply bandpass filter
     print(f"Applying bandpass filter: {L_FREQ}-{H_FREQ} Hz")
     raw.filter(L_FREQ, H_FREQ, fir_design='firwin')
+
+    # TEST: Apply notch filter as alternative to Zapline
+    # print(f"Applying notch filter at multiples of {LINE_FREQ} Hz")
+    # raw.notch_filter(np.arange(LINE_FREQ, raw.info['sfreq'] / 2, LINE_FREQ), filter_length='auto', fir_design='firwin', method='fir', verbose=False)
 
     raw = apply_rereferencing(raw)
     

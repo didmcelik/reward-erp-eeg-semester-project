@@ -23,192 +23,254 @@ def load_previous_step(subject_id):
     return raw
 
 
-def run_ica_classification(ica, raw):
-    """Classify ICA components using ICLabel"""
+def prepare_ica_data(raw):
+    """Prepare data for ICA following ICLabel requirements"""
+    
+    print("Preparing data for ICA...")
+    
+    # Create 1-100 Hz filtered copy for ICA (ICLabel requirement)
+    print("Creating 1-100 Hz filtered copy for ICA...")
+    filt_raw = raw.copy().filter(l_freq=1.0, h_freq=100.0, fir_design='firwin')
+
+    print("Setting common average reference...")
+    filt_raw.set_eeg_reference('average', projection=False)
+    
+    return filt_raw
+
+def create_epochs_for_ica(filt_raw):
+    """Create epochs for ICA fitting with artifact rejection"""
+    
+    print("Creating epochs for ICA fitting...")
+    
+    # Find events
+    events, event_id = mne.events_from_annotations(filt_raw)
+    
+    # Create longer epochs for ICA (better artifact capture)
+    epochs = mne.Epochs(
+        filt_raw, events, event_id,
+        tmin=-0.5, tmax=1.0,  # Longer epochs
+        baseline=None,  # No baseline correction for ICA
+        reject={'eeg': 150e-6},
+        flat={'eeg': 1e-6},
+        preload=True,
+        proj=False,  # No projectors
+        event_repeated='merge'  # Drop duplicate events
+    )
+    
+    print(f"Created {len(epochs)} epochs for ICA fitting")
+    
+    # Additional artifact rejection - remove extreme epochs
+    if len(epochs) > 100:  # Only if we have enough epochs
+        data = epochs.get_data()
+        
+        # Calculate variance per epoch
+        epoch_vars = np.var(data, axis=(1, 2))
+        
+        # Remove top 10% most variable epochs
+        var_threshold = np.percentile(epoch_vars, 90)
+        good_epochs = epoch_vars < var_threshold
+        
+        epochs = epochs[good_epochs]
+        print(f"After variance-based rejection: {len(epochs)} epochs")
+    
+    return epochs
+
+def run_ica(filt_raw, epochs):
+    """Run ICA decomposition following ICLabel best practices"""
+    
+    print("Fitting ICA...")
+    
+    # Setup ICA with ICLabel-compatible parameters
+    n_components = min(15, len(mne.pick_types(filt_raw.info, eeg=True)) - 1)
+    
+    ica = ICA(
+        n_components=n_components,
+        method='infomax',  # ICLabel requirement
+        max_iter='auto',
+        random_state=42,
+        fit_params=dict(extended=True)  # ICLabel requirement
+    )
+    
+    # Fit ICA on epochs (more stable than continuous data)
+    print(f"Fitting ICA with {n_components} components on {len(epochs)} epochs...")
+    ica.fit(epochs)
+    
+    return ica
+
+def classify_components(ica, filt_raw):
+    """Classify ICA components using ICLabel and manual methods"""
+    
+    exclude_components = []
+    
     
     try:
-        # Filter for ICLabel (1-100 Hz)
-        raw_for_iclabel = raw.copy().filter(1.0, 100.0)
-        
         print("Running ICLabel classification...")
-
-        # Use ICLabel to classify components
-        ic_labels = label_components(raw_for_iclabel, ica, method='iclabel')
         
-        # Get component labels and probabilities
+        ic_labels = label_components(filt_raw, ica, method='iclabel')
         labels = ic_labels['labels']
-        y_pred_proba = ic_labels['y_pred_proba']
-
-        print(f"ICLabel found these component types: {set(labels)}")
         
-        # Get brain probability for each component (more reliable approach)
-        exclude_components = []
-        for i in range(len(labels)):
-            # Get probabilities for this component
-            probs = y_pred_proba[i]
-            brain_prob = probs[0]  # Brain is typically index 0
-            predicted_label = labels[i]
-            max_prob = np.max(probs)
-            
-            print(f"Component {i}: {predicted_label} (brain: {brain_prob:.3f}, max: {max_prob:.3f})")
-            
-            # Exclude components with LOW brain probability
-            if brain_prob < 0.3:  # Threshold for exclusion
-                exclude_components.append(i)
-                print(f"  -> Excluding component {i} (low brain prob: {brain_prob:.3f})")
+        print("Component classifications:")
+        for i, label in enumerate(labels):
+            print(f"  IC{i:02d}: {label}")
         
-        print(f"ICLabel identified {len(exclude_components)} artifact components: {exclude_components}")
+        # Exclude non-brain components (conservative approach)
+        exclude_idx = [
+            idx for idx, label in enumerate(labels) 
+            if label not in ['brain', 'other']
+        ]
         
-        return exclude_components, ic_labels
+        exclude_components.extend(exclude_idx)
+        print(f"ICLabel excluded: {exclude_idx}")
         
-    except ImportError:
-        print("mne-icalabel not available, using manual EOG detection")
-        return [], None
     except Exception as e:
-        print(f"ICLabel classification failed: {e}")
-        return [], None
+        print(f"ICLabel failed: {e}")
     
-
-def find_eog_components(ica, raw):
-    """Find EOG-related components using correlation"""
+    # Remove duplicates and sort
+    exclude_components = sorted(list(set(exclude_components)))
     
-    eog_indices = []
+    # Safety check - don't exclude too many components
+    # max_exclude = n_components // 3  # Max 1/3 of components
+    # if len(exclude_components) > max_exclude:
+    #     print(f"Warning: Too many exclusions ({len(exclude_components)}). Limiting to {max_exclude}")
+    #     exclude_components = exclude_components[:max_exclude]
     
-    # Find EOG-related components
-    eog_channels = [ch for ch in raw.ch_names if raw.get_channel_types([ch])[0] == 'eog']
-    if eog_channels:
-        try:
-            eog_indices, eog_scores = ica.find_bads_eog(raw, ch_name=eog_channels[0], threshold=3.0)
-            print(f"Found {len(eog_indices)} EOG-related components: {eog_indices}")
-        except Exception as e:
-            print(f"Could not auto-detect EOG components: {e}")
-    else:
-        # Try using frontal channels as EOG proxies
-        frontal_channels = [ch for ch in ['Fp1', 'Fp2', 'AF3', 'AF4'] if ch in raw.ch_names]
-        if frontal_channels:
-            try:
-                eog_indices, eog_scores = ica.find_bads_eog(raw, ch_name=frontal_channels[0], threshold=3.0)
-                print(f"Found {len(eog_indices)} EOG-related components using {frontal_channels[0]}: {eog_indices}")
-            except Exception as e:
-                print(f"Could not detect EOG components using frontal channels: {e}")
-    
-    return eog_indices
-
-
-def run_ica(raw):
-    """Run ICA decomposition with IC Labeling """
-    
-    # Create copy with higher high-pass for ICA
-    raw_ica = raw.copy().filter(1.0, None)
-    
-    # Setup ICA
-    n_components = min(25, len([ch for ch in raw.ch_names if 'eeg' in raw.get_channel_types([ch])[0]]))
-    ica = ICA(n_components=n_components, method='picard', max_iter=300, random_state=42)
-    
-    print(f"Fitting ICA with {n_components} components...")
-    ica.fit(raw_ica)
-    
-    # STEP 1: Run IC labeling AFTER fitting ICA
-    auto_exclude, ic_labels = run_ica_classification(ica, raw_ica)
-    
-    # STEP 2: Find EOG-based exclusion
-    eog_exclude = find_eog_components(ica, raw_ica)
-    
-    # STEP 3: Combine all exclusions
-    all_exclude = list(set(auto_exclude + eog_exclude))
-    ica.exclude = all_exclude
-    
-    print(f"Total excluded components: {len(all_exclude)} = ICLabel: {len(auto_exclude)} + EOG: {len(eog_exclude)}")
+    ica.exclude = exclude_components
     print(f"Final excluded components: {ica.exclude}")
     
-    return ica, raw_ica
+    return ica
 
-def visualize_ica(ica, raw_ica, raw_original, subject_id, output_dir):
-    """Visualize ICA results"""
+def detect_and_interpolate_bad_channels(raw):
+    """Detect and interpolate bad channels"""
+    
+    print("Checking for bad channels...")
+    
+    # Simple bad channel detection based on variance
+    data = raw.get_data()
+    channel_vars = np.var(data, axis=1)
+    
+    # Channels with extremely high or low variance
+    median_var = np.median(channel_vars)
+    mad = np.median(np.abs(channel_vars - median_var))
+    
+    # Define outliers (very conservative)
+    lower_bound = median_var - 5 * mad
+    upper_bound = median_var + 5 * mad
+    
+    bad_channels = []
+    for i, ch_name in enumerate(raw.ch_names):
+        if raw.get_channel_types([ch_name])[0] == 'eeg':
+            if channel_vars[i] < lower_bound or channel_vars[i] > upper_bound:
+                bad_channels.append(ch_name)
+    
+    if bad_channels:
+        print(f"Detected bad channels: {bad_channels}")
+        raw.info['bads'] = bad_channels
+        raw.interpolate_bads(reset_bads=True)
+        print(f"Interpolated {len(bad_channels)} bad channels")
+    else:
+        print("No bad channels detected")
+    
+    return raw
+
+def visualize_ica_results(ica, filt_raw, raw_clean, raw_original, subject_id, output_dir):
+    """Create essential ICA visualizations"""
     
     subject_dir = os.path.join(output_dir, f'sub-{subject_id}', 'step04_ica')
     os.makedirs(subject_dir, exist_ok=True)
     
-    # Plot ICA components
-    figs = ica.plot_components(inst=raw_ica, show=False)
-    if isinstance(figs, list):
-        for i, fig in enumerate(figs):
-            fig.savefig(os.path.join(subject_dir, f'ica_components_page_{i+1}.png'), dpi=300)
-            plt.close(fig)
-    else:
-        figs.savefig(os.path.join(subject_dir, 'ica_components.png'), dpi=300)
-        plt.close(figs)
+    print("Creating ICA visualizations...")
     
-    # Plot excluded components
+    # 1. Plot ICA components
+    try:
+        fig = ica.plot_components(inst=filt_raw, show=False)
+        fig.savefig(os.path.join(subject_dir, 'ica_components.png'), dpi=300)
+        plt.close()
+    except Exception as e:
+        print(f"Could not plot components: {e}")
+    
+    # 2. Plot excluded component properties
     if ica.exclude:
-        for i, comp in enumerate(ica.exclude[:4]):  # Plot first 4 excluded
+        for comp in ica.exclude[:3]:  # First 3 excluded
             try:
-                fig = ica.plot_properties(raw_ica, picks=comp, show=False)
-                fig.savefig(os.path.join(subject_dir, f'excluded_component_{comp}.png'), dpi=300)
-                plt.close(fig)
-            except:
-                pass
+                fig = ica.plot_properties(filt_raw, picks=comp, show=False)
+                fig.savefig(os.path.join(subject_dir, f'excluded_IC{comp:02d}.png'), dpi=300)
+                plt.close()
+            except Exception as e:
+                print(f"Could not plot component {comp}: {e}")
     
-    # Compare data before and after ICA
-    raw_corrected = ica.apply(raw_original.copy())
-    
-    # Create separate plots for before/after comparison
-    fig1 = raw_original.plot(duration=10, n_channels=10, scalings='auto', 
-                           title=f'Sub-{subject_id} Before ICA', show=False)
-    fig1.savefig(os.path.join(subject_dir, 'before_ica.png'), dpi=300)
-    plt.close(fig1)
-    
-    fig2 = raw_corrected.plot(duration=10, n_channels=10, scalings='auto',
-                            title=f'Sub-{subject_id} After ICA', show=False)
-    fig2.savefig(os.path.join(subject_dir, 'after_ica.png'), dpi=300)
-    plt.close(fig2)
+    # 3. Before/after overlay comparison
+    try:
+        # Pick some channels for comparison
+        picks = mne.pick_channels_regexp(raw_original.ch_names, regexp='F.*|C.*')[:6]
+        
+        fig = ica.plot_overlay(raw_original, exclude=ica.exclude, picks=picks, show=False)
+        fig.savefig(os.path.join(subject_dir, 'before_after_overlay.png'), dpi=300)
+        plt.close()
+    except Exception as e:
+        print(f"Could not create overlay plot: {e}")
     
     print(f"ICA visualizations saved to: {subject_dir}")
 
 def apply_ica_and_save(ica, raw, subject_id, output_dir):
-    """Apply ICA and save results"""
+    """Apply ICA to original data and save results"""
     
     subject_dir = os.path.join(output_dir, f'sub-{subject_id}', 'step04_ica')
     os.makedirs(subject_dir, exist_ok=True)
     
-    # Apply ICA to remove artifacts
+    print("Applying ICA to original (0.1-40 Hz) data...")
+    
+    # Apply ICA to original filtered data
     raw_clean = ica.apply(raw.copy())
     
-    # Save ICA object
-    ica_fname = os.path.join(subject_dir, f'sub-{subject_id}_task-{TASK}_ica.fif')
-    ica.save(ica_fname, overwrite=True)
+    # Interpolate bad channels after ICA
+    raw_clean = detect_and_interpolate_bad_channels(raw_clean)
     
-    # Save cleaned data
+    # Save results
+    ica_fname = os.path.join(subject_dir, f'sub-{subject_id}_task-{TASK}_ica.fif')
     raw_fname = os.path.join(subject_dir, f'sub-{subject_id}_task-{TASK}_ica_raw.fif')
+    
+    ica.save(ica_fname, overwrite=True)
     raw_clean.save(raw_fname, overwrite=True)
     
-    print(f"ICA object saved to: {ica_fname}")
-    print(f"ICA-cleaned data saved to: {raw_fname}")
+    print(f"ICA object saved: {ica_fname}")
+    print(f"Clean data saved: {raw_fname}")
     
-    return raw_fname, ica_fname
+    return raw_clean
 
 def main():
-    parser = argparse.ArgumentParser(description='Step 4: Run ICA')
+    parser = argparse.ArgumentParser(description='Step 4: ICA with ICLabel')
     parser.add_argument('--subject', required=True, help='Subject ID')
     args = parser.parse_args()
     
     subject_id = args.subject
     
     print(f"Step 4: Running ICA for subject {subject_id}")
+    print("="*50)
     
     # Load data from previous step
     raw = load_previous_step(subject_id)
     
-    # Run ICA
-    ica, raw_ica = run_ica(raw)
+    # Prepare ICA data (1-40 Hz, average ref)
+    filt_raw = prepare_ica_data(raw)
     
-    # Create visualizations
-    visualize_ica(ica, raw_ica, raw, subject_id, OUTPUT_DIR)
+    # Create epochs for ICA
+    epochs = create_epochs_for_ica(filt_raw)
+    
+    # Fit ICA
+    ica = run_ica(filt_raw, epochs)
+    
+    # Classify components
+    ica = classify_components(ica, filt_raw)
     
     # Apply ICA and save
-    apply_ica_and_save(ica, raw, subject_id, OUTPUT_DIR)
+    raw_clean = apply_ica_and_save(ica, raw, subject_id, OUTPUT_DIR)
     
-    print(f"Step 4 completed for subject {subject_id}")
+    # Create visualizations
+    visualize_ica_results(ica, filt_raw, raw_clean, raw, subject_id, OUTPUT_DIR)
+    
+    print(f"\nStep 4 completed successfully!")
+    print(f"Excluded {len(ica.exclude)} components: {ica.exclude}")
+    print("="*50)
 
 if __name__ == "__main__":
     main()

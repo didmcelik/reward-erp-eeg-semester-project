@@ -197,7 +197,7 @@ def save_clean_epochs(epochs_clean, reject_log, ar, subject_id, output_dir):
     os.makedirs(subject_dir, exist_ok=True)
     
     # Save clean epochs
-    epochs_fname = os.path.join(subject_dir, f'sub-{subject_id}_task-{TASK}_clean_epochs.fif')
+    epochs_fname = os.path.join(subject_dir, f'sub-{subject_id}_task-{TASK}_clean-epo.fif')
     epochs_clean.save(epochs_fname, overwrite=True)
     
     # Save AutoReject object

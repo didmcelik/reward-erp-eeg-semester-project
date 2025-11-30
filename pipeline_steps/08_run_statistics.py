@@ -26,7 +26,7 @@ def load_previous_step(subject_id):
     
     # Load clean epochs for statistics
     epochs_file = os.path.join(OUTPUT_DIR, f'sub-{subject_id}', 'step06_rejection', 
-                              f'sub-{subject_id}_task-{TASK}_clean_epochs.fif')
+                              f'sub-{subject_id}_task-{TASK}_clean-epo.fif')
     epochs = mne.read_epochs(epochs_file, preload=True)
     
     # Load evoked responses  
@@ -224,17 +224,13 @@ def visualize_statistics(cluster_results, epochs, evokeds, rewp_results, subject
                 
                 # Plot significant cluster mask
                 cluster_mask = clusters[sig_clusters[0]]
-                im = axes[0,1].imshow(cluster_mask.astype(float), 
-                                     aspect='auto', cmap='RdBu_r')
-                axes[0,1].set_title(f'Significant cluster (p={cluster_p_values[sig_clusters[0]]:.4f})')
-                
-                # Plot time course of cluster
-                cluster_timecourse = np.mean(T_obs[cluster_mask], axis=0)
-                axes[1,0].plot(epochs.times, cluster_timecourse)
-                axes[1,0].axhline(0, color='k', linestyle='--', alpha=0.5)
+                mean_T = np.mean(T_obs, axis=0)
+                axes[1,0].plot(epochs.times, mean_T)
                 axes[1,0].set_xlabel('Time (s)')
                 axes[1,0].set_ylabel('T-statistic')
-                axes[1,0].set_title('Cluster time course')
+                axes[1,0].set_title('Mean T-statistic over time')
+                
+                axes[1,0].axhline(0, color='k', linestyle='--', alpha=0.5)
                 axes[1,0].grid(True, alpha=0.3)
                 
                 # Plot difference wave
