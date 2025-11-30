@@ -12,9 +12,7 @@ from pathlib import Path
 
 OUTPUT_DIR = "../output/derivatives/manual-pipeline"
 TASK = "casinos"
-
-# All possible subjects (extend as needed)
-ALL_SUBJECTS = ['27']  # Add more as you process them
+ALL_SUBJECTS = ['27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38']
 
 def find_processed_subjects():
     """Find all subjects that have completed processing"""
@@ -163,8 +161,18 @@ def create_figure_3a(grand_averages, output_dir):
                 ch_idx = win_evoked.ch_names.index('FCz')
                 
                 # Conversion to µV
-                win_data = win_evoked.data[ch_idx] * 1e6  # Convert to µV
-                loss_data = loss_evoked.data[ch_idx] * 1e6  # Convert to µV
+                win_data = win_evoked.data[ch_idx] 
+                loss_data = loss_evoked.data[ch_idx] 
+
+                # Check if data is already in µV range (-50 to +50) or in V range (-5e-5 to +5e-5)
+                data_range = np.max(np.abs(win_data))
+                if data_range < 1e-3:  # Data is in Volts
+                    win_data *= 1e6
+                    loss_data *= 1e6
+                    print(f"Data was in Volts, converted to µV. Range: {data_range*1e6:.1f} µV")
+                else:  # Data is already in µV
+                    print(f"Data already in µV. Range: {data_range:.1f} µV")
+
                 times = win_evoked.times
                 
                 # Plot win and loss
@@ -257,7 +265,7 @@ def create_figure_3c(grand_averages, output_dir):
             # Get FCz data
             if 'FCz' in diff_evoked.ch_names:
                 ch_idx = diff_evoked.ch_names.index('FCz')
-                diff_data = diff_evoked.data[ch_idx] * 1e6  # Convert to µV
+                diff_data = diff_evoked.data[ch_idx]
                 times = diff_evoked.times
                 
                 # Plot difference wave

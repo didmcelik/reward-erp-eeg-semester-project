@@ -16,7 +16,7 @@ def load_previous_step(subject_id):
     """Load data from previous step"""
     
     input_file = os.path.join(OUTPUT_DIR, f'sub-{subject_id}', 'step05_epochs', 
-                             f'sub-{subject_id}_task-{TASK}_epochs.fif')
+                             f'sub-{subject_id}_task-{TASK}-epo.fif')
     
     epochs = mne.read_epochs(input_file, preload=True)
     return epochs

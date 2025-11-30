@@ -9,7 +9,8 @@ import sys
 from pathlib import Path
 
 # Configuration
-SUBJECTS = ['27'] # List of subject IDs to process
+# SUBJECTS = ['27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38'] # List of subject IDs to process
+SUBJECTS = ['27'] # For testing, process only one subject
 PIPELINE_STEPS = [
     '01_fetch_data.py',
     '02_set_montage.py', 

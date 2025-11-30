@@ -38,64 +38,77 @@ def prepare_ica_data(raw):
     return filt_raw
 
 def create_epochs_for_ica(filt_raw):
-    """Create epochs for ICA fitting with artifact rejection"""
+    """Create cue-locked epochs (0-3s) for ICA training"""
     
-    print("Creating epochs for ICA fitting...")
+    print("Creating CUE-LOCKED epochs (0-3s) for ICA training...")
     
     # Find events
     events, event_id = mne.events_from_annotations(filt_raw)
     
-    # Create longer epochs for ICA (better artifact capture)
+    # Map CUE events (not feedback events) for ICA training
+    cue_events = {
+        'Stimulus/S  2': 'low_task_cue',
+        'Stimulus/S 12': 'mid_low_task_cue', 
+        'Stimulus/S 22': 'mid_high_task_cue',
+        'Stimulus/S 32': 'high_task_cue',
+    }
+    
+    # Create cue event mapping
+    ica_event_id = {}
+    for old_name, new_name in cue_events.items():
+        if old_name in event_id:
+            ica_event_id[new_name] = event_id[old_name]
+            print(f"ICA training: '{old_name}' → '{new_name}'")
+    
+    if not ica_event_id:
+        print("Warning: No cue events found! Falling back to all events...")
+        ica_event_id = event_id
+    
+    # Create epochs for ICA (0 to 3 seconds)
     epochs = mne.Epochs(
-        filt_raw, events, event_id,
-        tmin=-0.5, tmax=1.0,  # Longer epochs
-        baseline=None,  # No baseline correction for ICA
-        reject={'eeg': 150e-6},
+        filt_raw, events, ica_event_id,
+        tmin=0.0, tmax=3.0,  # ICA training window: 0-3s from cue
+        baseline=None,        # No baseline for ICA training
+        reject={'eeg': 200e-6}, 
         flat={'eeg': 1e-6},
         preload=True,
-        proj=False,  # No projectors
-        event_repeated='merge'  # Drop duplicate events
+        proj=False,
+        event_repeated='merge'
     )
     
-    print(f"Created {len(epochs)} epochs for ICA fitting")
+    print(f"Created {len(epochs)} cue-locked epochs (0-3s) for ICA training")
     
-    # Additional artifact rejection - remove extreme epochs
-    if len(epochs) > 100:  # Only if we have enough epochs
-        data = epochs.get_data()
-        
-        # Calculate variance per epoch
-        epoch_vars = np.var(data, axis=(1, 2))
-        
-        # Remove top 10% most variable epochs
-        var_threshold = np.percentile(epoch_vars, 90)
-        good_epochs = epoch_vars < var_threshold
-        
-        epochs = epochs[good_epochs]
-        print(f"After variance-based rejection: {len(epochs)} epochs")
+    # Print epoch counts per cue type
+    for condition in ica_event_id:
+        n_epochs = len(epochs[condition]) if condition in epochs.event_id else 0
+        print(f"  {condition}: {n_epochs} trials")
     
-    return epochs
+    return epochs, ica_event_id
 
-def run_ica(filt_raw, epochs):
-    """Run ICA decomposition following ICLabel best practices"""
+def run_ica(filt_raw):
+    """Run ICA: cue-locked training epochs"""
     
-    print("Fitting ICA...")
+    # Create cue-locked epochs for ICA training
+    ica_epochs, ica_event_id = create_epochs_for_ica(filt_raw)
     
-    # Setup ICA with ICLabel-compatible parameters
+    print("Fitting ICA on cue-locked epochs...")
+    
+    # Setup ICA 
     n_components = min(15, len(mne.pick_types(filt_raw.info, eeg=True)) - 1)
     
     ica = ICA(
         n_components=n_components,
-        method='infomax',  # ICLabel requirement
-        max_iter='auto',
+        method='infomax',
+        max_iter='auto', 
         random_state=42,
-        fit_params=dict(extended=True)  # ICLabel requirement
+        fit_params=dict(extended=True)
     )
     
-    # Fit ICA on epochs (more stable than continuous data)
-    print(f"Fitting ICA with {n_components} components on {len(epochs)} epochs...")
-    ica.fit(epochs)
+    # Fit ICA on CUE-LOCKED epochs
+    print(f"Fitting ICA with {n_components} components on {len(ica_epochs)} cue-locked epochs...")
+    ica.fit(ica_epochs)
     
-    return ica
+    return ica, ica_epochs
 
 def classify_components(ica, filt_raw):
     """Classify ICA components using ICLabel and manual methods"""
@@ -250,14 +263,11 @@ def main():
     # Load data from previous step
     raw = load_previous_step(subject_id)
     
-    # Prepare ICA data (1-40 Hz, average ref)
+    # Prepare ICA data (1-100 Hz, average ref)
     filt_raw = prepare_ica_data(raw)
     
-    # Create epochs for ICA
-    epochs = create_epochs_for_ica(filt_raw)
-    
-    # Fit ICA
-    ica = run_ica(filt_raw, epochs)
+    # Fit ICA on cue-locked epochs
+    ica, ica_epochs = run_ica(filt_raw)
     
     # Classify components
     ica = classify_components(ica, filt_raw)
@@ -269,6 +279,8 @@ def main():
     visualize_ica_results(ica, filt_raw, raw_clean, raw, subject_id, OUTPUT_DIR)
     
     print(f"\nStep 4 completed successfully!")
+    print(f"ICA trained on: {len(ica_epochs)} cue-locked epochs (0-3s)")
+    print(f"Applied to: feedback-locked analysis epochs (-200ms to +600ms)")
     print(f"Excluded {len(ica.exclude)} components: {ica.exclude}")
     print("="*50)
 

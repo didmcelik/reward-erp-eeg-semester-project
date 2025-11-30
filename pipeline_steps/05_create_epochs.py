@@ -16,22 +16,6 @@ EPOCHS_TMIN = -0.2
 EPOCHS_TMAX = 0.6
 BASELINE = (-0.2, 0)
 
-# Event renaming
-RENAME_EVENTS = {
-    'Stimulus/S  6': 'low_task_win', 
-    'Stimulus/S  7': 'low_task_loss',
-    'Stimulus/S 16': 'mid_low_task_win', 
-    'Stimulus/S 17': 'mid_low_task_loss',
-    'Stimulus/S 26': 'mid_high_task_win', 
-    'Stimulus/S 27': 'mid_high_task_loss',
-    'Stimulus/S 36': 'high_task_win', 
-    'Stimulus/S 37': 'high_task_loss',
-    'Stimulus/S  2': 'low_task_cue',
-    'Stimulus/S 12': 'mid_low_task_cue',
-    'Stimulus/S 22': 'mid_high_task_cue',
-    'Stimulus/S 32': 'high_task_cue',
-}
-
 def load_previous_step(subject_id):
     """Load data from previous step"""
     
@@ -41,6 +25,49 @@ def load_previous_step(subject_id):
     raw = mne.io.read_raw_fif(input_file, preload=True)
     return raw
 
+def apply_rejection_criteria(epochs):
+    """Apply exact rejection criteria from the study"""
+    
+    print("Applying rejection criteria:")
+    print("  - >40 µV per sample point (gradient)")
+    print("  - >150 µV across entire epoch (range)")
+    
+    data = epochs.get_data()  # Shape: (n_epochs, n_channels, n_times)
+    initial_count = len(epochs)
+    
+    # Criterion 1: >40 µV per sample point (gradient)
+    gradient = np.abs(np.diff(data, axis=2))  # Difference between adjacent samples
+    max_gradient_per_epoch = np.max(gradient, axis=(1, 2))  # Max across channels and time
+    gradient_threshold = 40e-6  # 40 µV
+    bad_gradient = max_gradient_per_epoch > gradient_threshold
+    
+    # Criterion 2: >150 µV across entire epoch (range)
+    epoch_range = np.ptp(data, axis=2)  # Peak-to-peak per channel
+    max_range_per_epoch = np.max(epoch_range, axis=1)  # Max across channels
+    range_threshold = 150e-6  # 150 µV
+    bad_range = max_range_per_epoch > range_threshold
+    
+    # Combine criteria (OR condition as stated by authors)
+    bad_epochs = bad_gradient | bad_range
+    
+    n_gradient = np.sum(bad_gradient)
+    n_range = np.sum(bad_range)
+    n_total = np.sum(bad_epochs)
+    
+    print(f"  Gradient rejection: {n_gradient} epochs > 40 µV/sample")
+    print(f"  Range rejection: {n_range} epochs > 150 µV range")
+    print(f"  Total rejected: {n_total} epochs")
+    
+    # Drop bad epochs
+    if n_total > 0:
+        bad_indices = np.where(bad_epochs)[0]
+        epochs.drop(bad_indices, reason='REJECTION_CRITERIA')
+    
+    rejection_rate = n_total / initial_count * 100
+    print(f"  Rejection rate: {rejection_rate:.1f}%")
+    
+    return epochs
+
 def create_epochs(raw):
     """Create epochs from continuous data"""
     
@@ -49,27 +76,58 @@ def create_epochs(raw):
     
     print(f"Found {len(events)} events")
     print(f"Original event IDs: {list(event_id.keys())}")
+
+    outcome_events = {
+        'Stimulus/S  6': 'low_task_win', 
+        'Stimulus/S  7': 'low_task_loss',
+        'Stimulus/S 16': 'mid_low_task_win', 
+        'Stimulus/S 17': 'mid_low_task_loss',
+        'Stimulus/S 26': 'mid_high_task_win', 
+        'Stimulus/S 27': 'mid_high_task_loss',
+        'Stimulus/S 36': 'high_task_win', 
+        'Stimulus/S 37': 'high_task_loss',
+    }
     
-    # Rename events
-    new_event_id = {}
-    for old_name, new_name in RENAME_EVENTS.items():
+    cue_events = {
+        'Stimulus/S  2': 'low_task_cue',
+        'Stimulus/S 12': 'mid_low_task_cue',
+        'Stimulus/S 22': 'mid_high_task_cue',
+        'Stimulus/S 32': 'high_task_cue',
+    }
+    
+    # Create OUTCOME EPOCHS for RewP analysis
+    print("\n=== Creating OUTCOME epochs for RewP analysis ===")
+    outcome_event_id = {}
+    for old_name, new_name in outcome_events.items():
         if old_name in event_id:
-            new_event_id[new_name] = event_id[old_name]
-            print(f"Renamed '{old_name}' to '{new_name}'")
+            outcome_event_id[new_name] = event_id[old_name]
+            print(f"Renamed '{old_name}' to '{new_name}' (OUTCOME)")
     
-    print(f"Final event IDs: {list(new_event_id.keys())}")
+    print(f"Outcome event IDs: {list(outcome_event_id.keys())}")
     
     # Create epochs
     epochs = mne.Epochs(
-        raw, events, new_event_id,
+        raw, events, outcome_event_id,
         tmin=EPOCHS_TMIN, tmax=EPOCHS_TMAX,
         baseline=BASELINE,
-        reject={'eeg': 100e-6},  # Peak-to-peak amplitude rejection
-        flat={'eeg': 1e-6},    # Flat signal rejection
+        reject=None,  # Peak-to-peak amplitude rejection
+        flat=None,    # Flat signal rejection
         preload=True
     )
     
     print(f"Created {len(epochs)} epochs")
+
+    # Apply rejection criteria
+    epochs = apply_rejection_criteria(epochs)
+
+    # Timing diagnostic
+    print("\n=== EVENT TIMING DIAGNOSTIC ===")
+    outcome_events_array = events[np.isin(events[:, 2], list(outcome_event_id.values()))]
+    if len(outcome_events_array) > 1:
+        intervals = np.diff(outcome_events_array[:, 0]) / raw.info['sfreq']
+        print(f"Mean interval between outcome events: {np.mean(intervals):.2f}s")
+        print(f"Min/Max intervals: {np.min(intervals):.2f}s / {np.max(intervals):.2f}s")
+    
 
     print("Applying gradient-based rejection (study criterion: 40 µV/sample)...")
     epochs = apply_gradient_rejection(epochs, threshold=40e-6)
@@ -91,7 +149,7 @@ def create_epochs(raw):
         n_epochs = len(epochs[condition])
         print(f"  {condition}: {n_epochs} trials")
     
-    return epochs, events, new_event_id
+    return epochs, events, outcome_event_id
 
 
 def apply_gradient_rejection(epochs, threshold=40e-6):
@@ -195,7 +253,7 @@ def save_epochs(epochs, subject_id, output_dir):
     os.makedirs(subject_dir, exist_ok=True)
     
     # Save epochs
-    epochs_fname = os.path.join(subject_dir, f'sub-{subject_id}_task-{TASK}_epochs.fif')
+    epochs_fname = os.path.join(subject_dir, f'sub-{subject_id}_task-{TASK}-epo.fif')
     epochs.save(epochs_fname, overwrite=True)
     
     print(f"Epochs saved to: {epochs_fname}")

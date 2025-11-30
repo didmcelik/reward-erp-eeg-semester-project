@@ -73,21 +73,30 @@ def analyze_rewp_amplitudes(evokeds, subject_id):
                 
                 # Extract data in time window
                 time_mask = (diff_evoked.times >= time_window[0]) & (diff_evoked.times <= time_window[1])
-                rewp_data = diff_evoked.data[ch_idx, time_mask] * 1e6  # Convert to µV
+                rewp_data = diff_evoked.data[ch_idx, time_mask]
                 
-                # Debug print
-                print(f"    {condition_name}: Data range: {rewp_data.min():.3f} to {rewp_data.max():.3f} µV")
+                data_range = np.max(np.abs(rewp_data))
+                if data_range < 1e-3:  # Data is in Volts, need to convert to µV
+                    rewp_data_uv = rewp_data * 1e6
+                    scale_msg = f"Converted from V to µV (scale factor: 1e6)"
+                else:  # Data already in µV
+                    rewp_data_uv = rewp_data
+                    scale_msg = f"Data already in µV scale"
                 
-                # RewP amplitude (most negative for classic RewP)
-                rewp_amplitude = float(np.max(rewp_data))  # Most negative
+                # Debug print with corrected scale
+                print(f"    {condition_name}: {scale_msg}")
+                print(f"    {condition_name}: Data range: {rewp_data_uv.min():.3f} to {rewp_data_uv.max():.3f} µV")
+                
+                # RewP amplitude (most positive for win-loss difference RewP)
+                rewp_amplitude = float(np.max(rewp_data_uv))  # Most positive
                 
                 # Mean voltage in window
-                mean_amplitude = float(np.mean(rewp_data))
+                mean_amplitude = float(np.mean(rewp_data_uv))
                 
                 rewp_results[condition_name] = {
                     'rewp_amplitude': rewp_amplitude,
                     'mean_amplitude': mean_amplitude,
-                    'peak_time': diff_evoked.times[time_mask][np.argmax(rewp_data)]
+                    'peak_time': diff_evoked.times[time_mask][np.argmax(rewp_data_uv)]
                 }
                 
                 print(f"  {condition_name}: RewP = {rewp_amplitude:.2f} µV, Mean = {mean_amplitude:.2f} µV")
@@ -175,12 +184,37 @@ def run_simple_statistics(evokeds):
     
     # Test each condition against zero at peak time
     for condition, evoked in evokeds.items():
-        evoked_data_uv = evoked.data * 1e6  # Convert to µV
-        # Find peak amplitude
-        peak_idx = np.unravel_index(np.argmax(np.abs(evoked_data_uv)), evoked_data_uv.shape)
-        peak_channel = evoked.ch_names[peak_idx[0]]
-        peak_time = evoked.times[peak_idx[1]]
-        peak_amplitude = evoked_data_uv[peak_idx]
+        
+        data_range = np.max(np.abs(evoked.data))
+        if data_range < 1e-3:  # Data is in Volts
+            evoked_data_uv = evoked.data * 1e6  # Convert to µV
+        else:  # Data already in µV
+            evoked_data_uv = evoked.data
+
+        # Find peak amplitude at FCz specifically
+        if 'FCz' in evoked.ch_names:
+            fcz_idx = evoked.ch_names.index('FCz')
+            fcz_data = evoked_data_uv[fcz_idx, :]
+            
+            # Find peak in FCz between 100-400ms
+            time_mask = (evoked.times >= 0.1) & (evoked.times <= 0.4)
+            fcz_windowed = fcz_data[time_mask]
+            
+            if len(fcz_windowed) > 0:
+                peak_idx_windowed = np.argmax(np.abs(fcz_windowed))
+                peak_time = evoked.times[time_mask][peak_idx_windowed]
+                peak_amplitude = fcz_windowed[peak_idx_windowed]
+            else:
+                peak_time = evoked.times[np.argmax(np.abs(fcz_data))]
+                peak_amplitude = fcz_data[np.argmax(np.abs(fcz_data))]
+            
+            peak_channel = 'FCz'
+        else:
+            # Fallback to global peak
+            peak_idx = np.unravel_index(np.argmax(np.abs(evoked_data_uv)), evoked_data_uv.shape)
+            peak_channel = evoked.ch_names[peak_idx[0]]
+            peak_time = evoked.times[peak_idx[1]]
+            peak_amplitude = evoked_data_uv[peak_idx]
         
         stats_results[condition] = {
             'peak_channel': peak_channel,

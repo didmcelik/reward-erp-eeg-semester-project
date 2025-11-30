@@ -6,7 +6,7 @@ import os
 import numpy as np
 
 # Load data
-sample_data_folder = '../data/ds004147'
+sample_data_folder = './data/ds004147'
 sample_data_raw_file = os.path.join(sample_data_folder, 'sub-27', 'eeg',
                                     'sub-27_task-casinos_eeg.vhdr')
 raw = mne.io.read_raw_brainvision(sample_data_raw_file , preload=True)
