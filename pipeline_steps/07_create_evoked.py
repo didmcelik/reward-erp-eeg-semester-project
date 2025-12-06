@@ -23,7 +23,7 @@ def load_previous_step(subject_id):
     """Load data from previous step"""
     
     input_file = os.path.join(OUTPUT_DIR, f'sub-{subject_id}', 'step06_rejection', 
-                             f'sub-{subject_id}_task-{TASK}_clean_epochs.fif')
+                             f'sub-{subject_id}_task-{TASK}_clean-epo.fif')
     
     epochs = mne.read_epochs(input_file, preload=True)
     return epochs
@@ -39,8 +39,16 @@ def create_evoked_responses(epochs):
             n_trials = len(epochs[condition])
             if n_trials > 0:
                 evoked = epochs[condition].average()
+                
+                # Ensure data is in Volts
+                data_range = np.max(np.abs(evoked.data))
+                if data_range > 1e-3:  # Data is in µV, convert to V
+                    evoked.data = evoked.data / 1e6
+                    print(f"  {condition}: {n_trials} trials (converted µV→V)")
+                else:
+                    print(f"  {condition}: {n_trials} trials (already in V)")
+                
                 evokeds[condition] = evoked
-                print(f"  {condition}: {n_trials} trials")
             else:
                 print(f"  {condition}: 0 trials - skipping")
         else:

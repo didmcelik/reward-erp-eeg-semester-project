@@ -24,15 +24,67 @@ def load_previous_step(subject_id):
 def exclude_learning_trials(epochs, n_exclude=5):
     """Exclude first N trials (learning phase)"""
     
-    print(f"Excluding first {n_exclude} trials (learning phase)")
+    print(f"Excluding first {n_exclude} trials per condition (as learning phase)")
+
+    epochs_to_drop = []
     
-    # Get trial indices to keep (exclude first n_exclude trials)
-    keep_indices = range(n_exclude, len(epochs))
-    epochs_clean = epochs[keep_indices]
+    for condition in epochs.event_id:
+        condition_indices = np.where(epochs.events[:, 2] == epochs.event_id[condition])[0]
+        
+        if len(condition_indices) > n_exclude:
+            # Sort by time and take first n_exclude
+            condition_times = [(idx, epochs.events[idx, 0]) for idx in condition_indices]
+            condition_times.sort(key=lambda x: x[1])  # Sort by time
+            
+            first_n_indices = [x[0] for x in condition_times[:n_exclude]]
+            epochs_to_drop.extend(first_n_indices)
+            
+            print(f"  {condition}: Excluding first {n_exclude} of {len(condition_indices)} trials")
+        else:
+            print(f"  {condition}: Only {len(condition_indices)} trials, excluding none")
     
-    print(f"Trials: {len(epochs)} → {len(epochs_clean)} (excluded {n_exclude} learning trials)")
+    # Drop the epochs
+    if epochs_to_drop:
+        epochs.drop(epochs_to_drop, reason='LEARNING_TRIALS')
+        print(f"Total learning trials excluded: {len(epochs_to_drop)}")
     
-    return epochs_clean
+    return epochs
+
+
+def apply_artifact_detection(epochs):
+    """Apply artifact detection"""
+    
+    print("Applying artifact detection...")
+    
+    reject_criteria = {
+        'eeg': 150e-6,     # or try 75µV
+    }
+    
+    flat_criteria = {
+        'eeg': 1e-6
+    }
+    
+    # Apply rejection
+    epochs.drop_bad(reject=reject_criteria, flat=flat_criteria)
+    
+    # Additional step: remove epochs with excessive drift
+    data = epochs.get_data()
+    bad_epochs = []
+    
+    for epoch_idx in range(len(epochs)):
+        epoch_data = data[epoch_idx]
+        
+        # Check for excessive between-sample differences
+        max_diff = np.max(np.abs(np.diff(epoch_data, axis=1)))
+        if max_diff > 40e-6:  # Use 40µV threshold
+            bad_epochs.append(epoch_idx)
+    
+    if bad_epochs:
+        epochs.drop(bad_epochs, reason='EXCESSIVE_DRIFT')
+        print(f"Dropped {len(bad_epochs)} epochs with excessive drift")
+    
+    return epochs
+
 
 def remove_bad_trials(epochs):
     """Remove bad trials using AutoReject"""
@@ -41,10 +93,15 @@ def remove_bad_trials(epochs):
 
     # Exclude learning trials
     epochs = exclude_learning_trials(epochs, n_exclude=5)
+
+    # Apply additional artifact detection
+    # epochs = apply_artifact_detection(epochs)
     
     # AutoReject for interpolation and rejection
     ar = AutoReject(
-        n_interpolate=[1, 2, 3, 4], 
+        n_interpolate=[1, 2],
+        cv=3,
+        thresh_method='random_search',
         random_state=42, 
         n_jobs=1, 
         verbose=True
@@ -70,7 +127,29 @@ def remove_bad_trials(epochs):
         if condition in epochs_clean.event_id:
             original_count = len(epochs[condition])
             clean_count = len(epochs_clean[condition])
-            print(f"  {condition}: {original_count} → {clean_count} ({clean_count/original_count*100:.1f}%)")
+            
+            # =Protect against division by zero
+            if original_count > 0:
+                percentage = clean_count / original_count * 100
+                print(f"  {condition}: {original_count} → {clean_count} ({percentage:.1f}%)")
+            else:
+                print(f"  {condition}: {original_count} → {clean_count} (no original trials)")
+        else:
+            # Condition completely excluded
+            original_count = len(epochs[condition]) if condition in epochs.event_id else 0
+            print(f"  {condition}: {original_count} → 0 (completely excluded)")
+    
+    # Check for completely missing conditions and warn
+    missing_conditions = []
+    for condition in epochs.event_id:
+        if condition not in epochs_clean.event_id:
+            missing_conditions.append(condition)
+    
+    if missing_conditions:
+        print(f"\n    WARNING: These conditions have no remaining trials:")
+        for condition in missing_conditions:
+            print(f"    {condition}")
+        print("  This subject may need to be excluded from group analysis.")
     
     return epochs_clean, reject_log, ar
 

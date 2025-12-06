@@ -25,6 +25,104 @@ def load_previous_step(subject_id):
     raw = mne.io.read_raw_fif(input_file, preload=True)
     return raw
 
+
+# def apply_baseline_regression(epochs):
+#     """Apply baseline regression""
+    
+#     print("Applying baseline regression to remove slow drifts...")
+    
+#     # Get baseline period data
+#     baseline_start = -0.2
+#     baseline_end = 0.0
+    
+#     # Method 1: Use MNE's built-in regression approach
+#     epochs_reg = epochs.copy()
+    
+#     # Get baseline indices
+#     baseline_mask = (epochs.times >= baseline_start) & (epochs.times <= baseline_end)
+    
+#     # For each epoch and channel, fit linear regression in baseline
+#     data = epochs_reg.get_data()  # Shape: (n_epochs, n_channels, n_times)
+    
+#     for epoch_idx in range(data.shape[0]):
+#         for ch_idx in range(data.shape[1]):
+#             epoch_data = data[epoch_idx, ch_idx, :]
+#             baseline_data = epoch_data[baseline_mask]
+#             baseline_times = epochs.times[baseline_mask]
+            
+#             # Fit linear regression to baseline
+#             from scipy.stats import linregress
+#             slope, intercept, _, _, _ = linregress(baseline_times, baseline_data)
+            
+#             # Remove linear trend from entire epoch
+#             predicted_trend = slope * epochs.times + intercept
+#             data[epoch_idx, ch_idx, :] -= predicted_trend
+    
+#     # Update epochs with regression-corrected data
+#     epochs_reg._data = data
+    
+#     print(f"Baseline regression applied to {len(epochs_reg)} epochs")
+#     return epochs_reg
+
+
+def apply_mne_baseline_regression(epochs):
+    """Use MNE's regression baseline method"""
+    
+    print("Applying MNE baseline regression...")
+    
+    # Apply regression-based baseline correction
+    epochs_reg = epochs.copy()
+    epochs_reg.apply_baseline(baseline=(-0.2, 0.0))
+    
+    # Or use regression approach
+    baseline_start_idx = np.where(epochs.times >= -0.2)[0][0]
+    baseline_end_idx = np.where(epochs.times <= 0.0)[0][-1]
+    
+    # Apply custom regression baseline
+    data = epochs_reg.get_data()
+    for epoch_idx in range(data.shape[0]):
+        for ch_idx in range(data.shape[1]):
+            epoch_data = data[epoch_idx, ch_idx, :]
+            baseline_data = epoch_data[baseline_start_idx:baseline_end_idx+1]
+            baseline_times = epochs.times[baseline_start_idx:baseline_end_idx+1]
+            
+            # Linear regression
+            from numpy.polynomial import Polynomial
+            p = Polynomial.fit(baseline_times, baseline_data, 1)
+            trend = p(epochs.times)
+            data[epoch_idx, ch_idx, :] -= trend
+    
+    epochs_reg._data = data
+    return epochs_reg
+
+
+
+def apply_baseline_regression_poly(epochs):
+    """Apply baseline correction and additional regression to remove slow drifts"""
+    
+    epochs_corrected = epochs.copy()
+    
+    # Apply baseline correction first
+    epochs_corrected.apply_baseline(baseline=(-0.2, 0))
+    
+    # Then apply additional regression to remove slow drifts
+    data = epochs_corrected.get_data()
+    
+    for epoch_idx in range(data.shape[0]):
+        for ch_idx in range(data.shape[1]):
+            epoch_data = data[epoch_idx, ch_idx, :]
+            
+            # Fit polynomial trend and remove it
+            x = np.arange(len(epoch_data))
+            p = np.polyfit(x, epoch_data, 2)  # 2nd degree polynomial
+            trend = np.polyval(p, x)
+            data[epoch_idx, ch_idx, :] -= trend
+    
+    epochs_corrected._data = data
+    return epochs_corrected
+
+
+
 def apply_rejection_criteria(epochs):
     """Apply exact rejection criteria from the study"""
     
@@ -110,15 +208,18 @@ def create_epochs(raw):
         raw, events, outcome_event_id,
         tmin=EPOCHS_TMIN, tmax=EPOCHS_TMAX,
         baseline=BASELINE,
-        reject=None,  # Peak-to-peak amplitude rejection
-        flat=None,    # Flat signal rejection
+        reject=dict(eeg=150e-6),  # Peak-to-peak amplitude rejection
+        flat=dict(eeg=1e-6),    # Flat signal rejection
         preload=True
     )
     
     print(f"Created {len(epochs)} epochs")
 
+    epochs = apply_mne_baseline_regression(epochs)
+    # epochs = apply_baseline_regression_poly(epochs)
+
     # Apply rejection criteria
-    epochs = apply_rejection_criteria(epochs)
+    # epochs = apply_rejection_criteria(epochs)
 
     # Timing diagnostic
     print("\n=== EVENT TIMING DIAGNOSTIC ===")

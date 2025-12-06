@@ -10,6 +10,10 @@ from pathlib import Path
 
 # Configuration
 # SUBJECTS = ['27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38'] # List of subject IDs to process
+
+# Exclude subject 28 (91.2% of epochs dropped, very noisy)
+# SUBJECTS = ['27', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38'] 
+
 SUBJECTS = ['27'] # For testing, process only one subject
 PIPELINE_STEPS = [
     '01_fetch_data.py',

@@ -98,7 +98,7 @@ def run_ica(filt_raw):
     
     ica = ICA(
         n_components=n_components,
-        method='infomax',
+        method='picard',
         max_iter='auto', 
         random_state=42,
         fit_params=dict(extended=True)

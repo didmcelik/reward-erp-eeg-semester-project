@@ -14,7 +14,7 @@ TASK = "casinos"
 
 # Filter parameters
 L_FREQ = 0.1  # High-pass
-H_FREQ = 20.0  # Low-pass
+H_FREQ = 40.0  # Low-pass
 LINE_FREQ = 50.0  # Notch filter for line noise
 RESAMPLE_FREQ = 250.0
 

@@ -49,10 +49,16 @@ def analyze_rewp_amplitudes(evokeds, subject_id):
     rewp_results = {}
     
     # RewP time window and electrode (from study: FCz, 240-340ms)
-    time_window = (0.240, 0.340)
     electrode = 'FCz'
+    time_window = (0.240, 0.340)  # 240-340ms in seconds
+
+    # At 250Hz: 240-340ms window
+    # 240ms = 0.24s × 250Hz + 50 samples (baseline) = 110 samples  
+    # 340ms = 0.34s × 250Hz + 50 samples (baseline) = 135 samples
+    start_sample = 110  # 240ms at 250Hz
+    end_sample = 135    # 340ms at 250Hz
     
-    print(f"\nAnalyzing RewP at {electrode} electrode, {time_window[0]*1000}-{time_window[1]*1000}ms:")
+    print(f"\nAnalyzing RewP at {electrode} electrode, {time_window[0]*1000:.0f}-{time_window[1]*1000:.0f}ms")
     
     # Calculate RewP for each condition
     conditions = [
@@ -64,44 +70,45 @@ def analyze_rewp_amplitudes(evokeds, subject_id):
     
     for condition_name, win_cond, loss_cond in conditions:
         if win_cond in evokeds and loss_cond in evokeds:
-            # Create difference wave (win - loss)
-            diff_evoked = mne.combine_evoked([evokeds[win_cond], evokeds[loss_cond]], weights=[1, -1])
             
-            # Find FCz channel
-            if electrode in diff_evoked.ch_names:
-                ch_idx = diff_evoked.ch_names.index(electrode)
+            if electrode in evokeds[win_cond].ch_names:
+                ch_idx = evokeds[win_cond].ch_names.index(electrode)
                 
-                # Extract data in time window
-                time_mask = (diff_evoked.times >= time_window[0]) & (diff_evoked.times <= time_window[1])
-                rewp_data = diff_evoked.data[ch_idx, time_mask]
+                # Extract data and convert to µV
+                win_data = evokeds[win_cond].data[ch_idx, :].flatten() * 1000000
+                loss_data = evokeds[loss_cond].data[ch_idx, :].flatten() * 1000000
                 
-                data_range = np.max(np.abs(rewp_data))
-                if data_range < 1e-3:  # Data is in Volts, need to convert to µV
-                    rewp_data_uv = rewp_data * 1e6
-                    scale_msg = f"Converted from V to µV (scale factor: 1e6)"
-                else:  # Data already in µV
-                    rewp_data_uv = rewp_data
-                    scale_msg = f"Data already in µV scale"
-                
-                # Debug print with corrected scale
-                print(f"    {condition_name}: {scale_msg}")
-                print(f"    {condition_name}: Data range: {rewp_data_uv.min():.3f} to {rewp_data_uv.max():.3f} µV")
-                
-                # RewP amplitude (most positive for win-loss difference RewP)
-                rewp_amplitude = float(np.max(rewp_data_uv))  # Most positive
-                
-                # Mean voltage in window
-                mean_amplitude = float(np.mean(rewp_data_uv))
-                
-                rewp_results[condition_name] = {
-                    'rewp_amplitude': rewp_amplitude,
-                    'mean_amplitude': mean_amplitude,
-                    'peak_time': diff_evoked.times[time_mask][np.argmax(rewp_data_uv)]
-                }
-                
-                print(f"  {condition_name}: RewP = {rewp_amplitude:.2f} µV, Mean = {mean_amplitude:.2f} µV")
-            else:
-                print(f"    {electrode} not found in {condition_name}")
+                # Extract correct samples for 250Hz (110:135)
+                if len(win_data) >= end_sample:
+                    win_epoch = win_data[start_sample:end_sample]
+                    loss_epoch = loss_data[start_sample:end_sample]
+                    
+                    # Calculate metrics
+                    win_max = np.max(win_epoch)
+                    loss_max = np.max(loss_epoch)
+                    rewp_amplitude = win_max - loss_max
+                    
+                    win_mean = np.mean(win_epoch)
+                    loss_mean = np.mean(loss_epoch)
+                    rewp_mean = win_mean - loss_mean
+                    
+                    # Find peak time in the actual time array
+                    peak_sample_idx = np.argmax(np.abs(win_epoch - loss_epoch)) + start_sample
+                    peak_time = evokeds[win_cond].times[peak_sample_idx]
+                    
+                    rewp_results[condition_name] = {
+                        'rewp_max_amplitude': rewp_amplitude,
+                        'rewp_mean_amplitude': rewp_mean,
+                        'win_max': win_max,
+                        'loss_max': loss_max,
+                        'peak_time': peak_time,
+                        'n_samples': len(win_epoch)
+                    }
+                    
+                    print(f"  {condition_name}: Win_MAX = {win_max:.2f}µV, Loss_MAX = {loss_max:.2f}µV")
+                    print(f"                   RewP = {rewp_amplitude:.2f}µV, Peak at {peak_time*1000:.1f}ms")
+                else:
+                    print(f"    ERROR: Insufficient samples for {condition_name} ({len(win_data)} samples)")
     
     return rewp_results
 
@@ -292,8 +299,8 @@ def visualize_statistics(cluster_results, epochs, evokeds, rewp_results, subject
         
         # Plot RewP amplitudes
         conditions = list(rewp_results.keys())
-        rewp_amps = [results['rewp_amplitude'] for results in rewp_results.values()]
-        mean_amps = [results['mean_amplitude'] for results in rewp_results.values()]
+        rewp_amps = [results['rewp_max_amplitude'] for results in rewp_results.values()]
+        mean_amps = [results['rewp_mean_amplitude'] for results in rewp_results.values()]
         
         x = np.arange(len(conditions))
         width = 0.35
@@ -400,13 +407,38 @@ def save_statistics(cluster_results, simple_stats, rewp_results, subject_id, out
             
             for condition, results in rewp_results.items():
                 f.write(f"{condition}:\n")
-                f.write(f"  RewP Amplitude (max): {results['rewp_amplitude']:.2f} µV\n")
-                f.write(f"  Mean Amplitude: {results['mean_amplitude']:.2f} µV\n")
+                f.write(f"  RewP Amplitude (max): {results['rewp_max_amplitude']:.2f} µV\n")
+                f.write(f"  Mean Amplitude: {results['rewp_mean_amplitude']:.2f} µV\n")
                 f.write(f"  Peak Time: {results['peak_time']:.3f} s\n\n")
         
         print(f"RewP results saved to: {rewp_fname}")
     
     return subject_dir
+
+
+def debug_epoch_info(evokeds, subject_id):
+    """Debug function to check epoch parameters"""
+    
+    print(f"\n=== DEBUG: Epoch Info for Subject {subject_id} ===")
+    
+    for condition, evoked in evokeds.items():
+        print(f"{condition}:")
+        print(f"  Data shape: {evoked.data.shape}")
+        print(f"  Time range: {evoked.times[0]:.3f} to {evoked.times[-1]:.3f}s")
+        print(f"  Sampling rate: {evoked.info['sfreq']} Hz")
+        print(f"  N samples: {len(evoked.times)}")
+        print(f"  Expected samples for -0.2 to 0.6s: {int(0.8 * evoked.info['sfreq'])}")
+        
+        # Check if 240-340ms window exists
+        time_mask_240_340 = (evoked.times >= 0.240) & (evoked.times <= 0.340)
+        print(f"  240-340ms window available: {np.any(time_mask_240_340)} ({np.sum(time_mask_240_340)} samples)")
+        
+        if 'FCz' in evoked.ch_names:
+            fcz_idx = evoked.ch_names.index('FCz')
+            data_range = np.max(np.abs(evoked.data[fcz_idx, :]))
+            print(f"  FCz data range: {data_range:.2e} (likely {'µV' if data_range > 1e-3 else 'V'})")
+        
+        print()
 
 
 def main():
@@ -420,6 +452,9 @@ def main():
     
     # Load data from previous steps
     epochs, evokeds = load_previous_step(subject_id)
+
+    # Debug epoch info
+    debug_epoch_info(evokeds, subject_id)
 
     # Analyze RewP amplitudes
     rewp_results = analyze_rewp_amplitudes(evokeds, subject_id)

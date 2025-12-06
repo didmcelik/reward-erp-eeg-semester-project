@@ -39,19 +39,38 @@ def aggregate_evoked_responses(subjects):
     for subject in subjects:
         evoked_dir = os.path.join(OUTPUT_DIR, f'sub-{subject}', 'step07_evoked')
         
-        # Load all evoked file
-        all_evoked_file = os.path.join(evoked_dir, f'sub-{subject}_task-{TASK}_all_ave.fif')
+        # Load individual evoked files
+        conditions = ['low_task_win', 'low_task_loss', 'mid_low_task_win', 'mid_low_task_loss',
+                     'mid_high_task_win', 'mid_high_task_loss', 'high_task_win', 'high_task_loss']
         
-        if os.path.exists(all_evoked_file):
-            evokeds_list = mne.read_evokeds(all_evoked_file)
+        subject_evokeds = {}
+        for condition in conditions:
+            evoked_file = os.path.join(evoked_dir, f'sub-{subject}_task-{TASK}_{condition}_ave.fif')
             
-            for evoked in evokeds_list:
-                condition = evoked.comment
-                if condition not in all_evokeds:
-                    all_evokeds[condition] = []
-                all_evokeds[condition].append(evoked)
-                
-            print(f"  Loaded {len(evokeds_list)} evoked responses from subject {subject}")
+            if os.path.exists(evoked_file):
+                try:
+                    evoked = mne.read_evokeds(evoked_file)[0]
+                    
+                    data_range = np.max(np.abs(evoked.data))
+                    if data_range > 1e-3:  # Data is in µV, convert to V
+                        evoked.data = evoked.data / 1e6
+                        print(f"  {subject}-{condition}: Converted µV to V")
+                    else:
+                        print(f"  {subject}-{condition}: Data already in V")
+                    
+                    # Check baseline correction
+                    baseline_period = (evoked.times >= -0.2) & (evoked.times <= 0.0)
+                    baseline_mean = np.mean(evoked.data[:, baseline_period])
+                    
+                    if abs(baseline_mean) > 1e-7:  # Baseline not zero
+                        print(f"  WARNING: {subject}-{condition} baseline not zeroed: {baseline_mean*1e6:.2f}µV")
+                    
+                    if condition not in all_evokeds:
+                        all_evokeds[condition] = []
+                    all_evokeds[condition].append(evoked)
+                    
+                except Exception as e:
+                    print(f"  ERROR loading {subject}-{condition}: {e}")
     
     # Calculate grand averages
     grand_averages = {}
@@ -63,6 +82,39 @@ def aggregate_evoked_responses(subjects):
             print(f"  Grand average for {condition}: {len(evokeds_list)} subjects")
     
     return grand_averages, all_evokeds
+
+
+def diagnose_data_quality(grand_averages):
+    """Diagnose data quality vs authors' expectations"""
+    
+    print("\n=== DATA QUALITY DIAGNOSIS ===")
+    
+    for condition, evoked in grand_averages.items():
+        if 'FCz' in evoked.ch_names:
+            ch_idx = evoked.ch_names.index('FCz')
+            data = evoked.data[ch_idx] * 1e6  # Convert to µV for analysis
+            
+            # Check data range
+            data_range = np.max(data) - np.min(data)
+            baseline_period = (evoked.times >= -0.2) & (evoked.times <= 0.0)
+            baseline_std = np.std(data[baseline_period])
+            
+            print(f"{condition}:")
+            print(f"  Range: {np.min(data):.1f} to {np.max(data):.1f} µV (range: {data_range:.1f} µV)")
+            print(f"  Baseline std: {baseline_std:.2f} µV")
+            
+            # Authors' data should have:
+            # - Range: approximately -10 to +10 µV
+            # - Clean baseline with std < 1 µV
+            # - Clear ERP components visible
+            
+            if data_range > 30:
+                print(f"  ⚠️  WARNING: Range too large ({data_range:.1f} µV > 30 µV)")
+            if baseline_std > 2:
+                print(f"  ⚠️  WARNING: Baseline too noisy ({baseline_std:.2f} µV > 2 µV)")
+    
+    print("=" * 40)
+
 
 def aggregate_statistics(subjects):
     """Aggregate statistical results across subjects"""
@@ -135,10 +187,10 @@ def create_figure_3a(grand_averages, output_dir):
     
     # Define colors and styles matching the study
     colors = {
-        'low_low': '#FF6B6B',      # Light red for low-low
-        'mid_low': '#66B2FF',      # Light blue for mid-low  
-        'mid_high': '#FF6666',     # Red for mid-high
-        'high_high': '#3366FF'     # Blue for high-high
+        'low_low': '#FF6B6B',      # Red for Low-Low
+        'mid_low': '#66B2FF',      # Blue for Mid-Low  
+        'mid_high': '#FF6666',     # Red for Mid-High
+        'high_high': '#3366FF'     # Blue for High-High
     }
 
     line_styles = {'win': '-', 'loss': '--'}
@@ -160,45 +212,54 @@ def create_figure_3a(grand_averages, output_dir):
             if 'FCz' in win_evoked.ch_names:
                 ch_idx = win_evoked.ch_names.index('FCz')
                 
-                # Conversion to µV
                 win_data = win_evoked.data[ch_idx] 
                 loss_data = loss_evoked.data[ch_idx] 
-
-                # Check if data is already in µV range (-50 to +50) or in V range (-5e-5 to +5e-5)
+                
+                # Check data is reasonable (should be in V, around 1e-5 to 1e-4)
                 data_range = np.max(np.abs(win_data))
-                if data_range < 1e-3:  # Data is in Volts
-                    win_data *= 1e6
-                    loss_data *= 1e6
-                    print(f"Data was in Volts, converted to µV. Range: {data_range*1e6:.1f} µV")
-                else:  # Data is already in µV
-                    print(f"Data already in µV. Range: {data_range:.1f} µV")
-
+                if data_range > 1e-3:  # Data is in µV, convert to V
+                    win_data = win_data / 1e6
+                    loss_data = loss_data / 1e6
+                    print(f"WARNING: Data was in µV, converted to V")
+                
+                # Convert to µV for plotting
+                win_data_uv = win_data * 1e6
+                loss_data_uv = loss_data * 1e6
+                
                 times = win_evoked.times
                 
                 # Plot win and loss
-                ax.plot(times, win_data, color=colors[color_key], 
-                       linestyle=line_styles['win'], linewidth=2, 
+                ax.plot(times, win_data_uv, color=colors[color_key], 
+                       linestyle=line_styles['win'], linewidth=1, 
                        label=f'{label} Win')
-                ax.plot(times, loss_data, color=colors[color_key], 
-                       linestyle=line_styles['loss'], linewidth=2,
+                ax.plot(times, loss_data_uv, color=colors[color_key], 
+                       linestyle=line_styles['loss'], linewidth=1, alpha=0.7,
                        label=f'{label} Loss')
+                
+                print(f"Plotted {label}: Win range = {np.min(win_data_uv):.1f} to {np.max(win_data_uv):.1f} µV")
     
-    # Formatting to match study exactly
+    # Formatting to match study 
     ax.set_xlabel('Time (s)', fontsize=12)
     ax.set_ylabel('Voltage (µV)', fontsize=12)
     ax.set_title('FCz', fontsize=14, fontweight='bold')
-    ax.axhline(0, color='black', linewidth=0.5)
-    ax.axvline(0, color='black', linewidth=0.5)
+    ax.axhline(0, color='black', linewidth=0.8)
+    ax.axvline(0, color='black', linewidth=0.8)
     ax.grid(True, alpha=0.3)
     ax.set_xlim(-0.2, 0.6)
+    ax.set_ylim(-10, 15)  # Match authors' range
     
-    # Add legend in style of study
+    # Add shaded analysis window
+    ax.axvspan(0.240, 0.340, alpha=0.1, color='gray', label='Analysis Window')
+    
+    # Legend in style of study
     ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
     
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'figure_3a_win_loss_waveforms.png'), 
                 dpi=300, bbox_inches='tight')
     plt.close()
+    
+    print("Figure 3a created with corrected scaling")
 
 def create_figure_3b(grand_averages, output_dir):
     """Create Figure 3b: Scalp distribution of win-loss difference"""
@@ -247,6 +308,13 @@ def create_figure_3c(grand_averages, output_dir):
         'high_task': '#2ECC71'      # Green
     }
     
+    line_styles = {
+        'low_task': '-',           # Solid
+        'mid_low_task': '--',      # Dashed
+        'mid_high_task': ':',      # Dotted
+        'high_task': '-'           # Solid
+    }
+    
     # Create and plot difference waves
     contrast_pairs = [
         ('low_task_win', 'low_task_loss', 'low_task', 'Low Task, Low Cue'),
@@ -265,117 +333,164 @@ def create_figure_3c(grand_averages, output_dir):
             # Get FCz data
             if 'FCz' in diff_evoked.ch_names:
                 ch_idx = diff_evoked.ch_names.index('FCz')
-                diff_data = diff_evoked.data[ch_idx]
+                
+                # Convert to µV for plotting
+                diff_data = diff_evoked.data[ch_idx] * 1e6  # Convert V to µV
                 times = diff_evoked.times
                 
                 # Plot difference wave
-                ax.plot(times, diff_data, color=colors[color_key], 
-                       linewidth=3, label=label)
+                ax.plot(times, diff_data, 
+                       color=colors[color_key], 
+                       linestyle=line_styles[color_key],
+                       linewidth=1, 
+                       label=label,
+                       alpha=0.8)
+                
+                print(f"Plotted {label}: Range {np.min(diff_data):.1f} to {np.max(diff_data):.1f} µV")
     
     # Add shaded region for analysis window (240-340ms)
-    ax.axvspan(0.240, 0.340, alpha=0.2, color='gray', 
-               label='Analysis Window (240-340ms)')
+    ax.axvspan(0.240, 0.340, alpha=0.15, color='gray', 
+               label='Analysis Window (240-340ms)', zorder=0)
     
-    # Formatting
+    # Formatting to match authors EXACTLY
     ax.set_xlabel('Time (s)', fontsize=12)
-    ax.set_ylabel('Voltage (µV)', fontsize=12)
+    ax.set_ylabel('Voltage (µV)', fontsize=12)  
     ax.set_title('FCz', fontsize=14, fontweight='bold')
-    ax.axhline(0, color='black', linewidth=0.5)
-    ax.axvline(0, color='black', linewidth=0.5)
+    ax.axhline(0, color='black', linewidth=0.8)
+    ax.axvline(0, color='black', linewidth=0.8) 
     ax.grid(True, alpha=0.3)
     ax.set_xlim(-0.2, 0.6)
-    ax.set_ylim(-10, 10)
-    ax.legend(fontsize=10)
+    ax.set_ylim(-5, 10)  # Match authors' range for difference waves
+    
+    # Legend styling
+    ax.legend(fontsize=10, frameon=True, fancybox=True, shadow=True)
     
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'figure_3c_difference_waveforms.png'), 
                 dpi=300, bbox_inches='tight')
     plt.close()
+    
+    print("Figure 3c created with µV conversion")
 
 def create_figure_3d(df_stats, output_dir):
     """Create Figure 3d: RewP scores by condition"""
     
-    if df_stats is None or len(df_stats) == 0:
-        print("No statistics available for Figure 3d")
+    # Get RewP data
+    subjects = df_stats['subject'].tolist() if df_stats is not None else []
+    rewp_data = load_rewp_results(subjects)
+    
+    if not any(rewp_data.values()):
+        print("No RewP data available for Figure 3d")
         return
     
-    # Load RewP results for proper values
-    rewp_data = load_rewp_results(df_stats)
+    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
     
-    if not rewp_data:
-        print("No RewP data available")
-        return
-    
-    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-    
-    # Prepare data for plotting
+    # Prepare data for box plot
     conditions = ['Low-Low', 'Mid-Low', 'Mid-High', 'High-High']
-    rewp_values = []
-    
-    # Extract RewP values (you'll need to modify this based on your data structure)
-    condition_mapping = {
-        'Low-Low': 'low_task',
-        'Mid-Low': 'mid_low_task', 
-        'Mid-High': 'mid_high_task',
-        'High-High': 'high_task'
-    }
+    plot_data = []
     
     for condition in conditions:
-        key = condition_mapping.get(condition)
-        if key in rewp_data:
-            rewp_values.append(abs(rewp_data[key]))  # Use absolute value for display
+        if condition in rewp_data and rewp_data[condition]:
+            plot_data.append(rewp_data[condition])
         else:
-            rewp_values.append(0)
+            plot_data.append([])
     
-    # Create box plot
-    x_pos = np.arange(len(conditions))
+    # Create box plot (like authors)
+    box_plot = ax.boxplot(plot_data, labels=conditions, patch_artist=True)
     
-    # Plot bars (since you have single subject, show as bars with individual points)
-    bars = ax.bar(x_pos, rewp_values, alpha=0.7, color=['#E74C3C', '#3498DB', '#9B59B6', '#2ECC71'])
+    # Color the boxes
+    colors = ['#E74C3C', '#3498DB', '#9B59B6', '#2ECC71']
+    for patch, color in zip(box_plot['boxes'], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
     
-    # Add individual data points (dots for each subject)
-    for i, value in enumerate(rewp_values):
-        ax.scatter(i, value, color='black', s=50, zorder=10)
+    # Add individual data points
+    for i, condition_data in enumerate(plot_data):
+        if condition_data:
+            y = condition_data
+            x = np.random.normal(i+1, 0.04, size=len(y))
+            ax.scatter(x, y, alpha=0.7, color='black', s=30, zorder=10)
     
     # Formatting
     ax.set_xlabel('Task-Cue Combination', fontsize=12)
-    ax.set_ylabel('Voltage (µV)', fontsize=12)
-    ax.set_title('RewP Amplitude by Condition', fontsize=14)
-    ax.set_xticks(x_pos)
-    ax.set_xticklabels(conditions, rotation=45, ha='right')
+    ax.set_ylabel('RewP Amplitude (µV)', fontsize=12)
+    ax.set_title('RewP Amplitude by Condition', fontsize=14, fontweight='bold')
     ax.grid(True, alpha=0.3, axis='y')
-    ax.set_ylim(0, max(rewp_values) * 1.2 if rewp_values else 10)
+    ax.set_ylim(-2, 6)
     
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'figure_3d_rewp_scores.png'), 
                 dpi=300, bbox_inches='tight')
     plt.close()
+    
+    print(f"Figure 3d created with {sum(len(data) for data in plot_data)} data points")
 
-def load_rewp_results(df_stats):
-    """Load RewP results from statistics files"""
+def load_rewp_results(subjects):
+    """Load RewP results from Step 8 analysis"""
     
-    rewp_data = {}
+    rewp_data = {'Low-Low': [], 'Mid-Low': [], 'Mid-High': [], 'High-High': []}
     
-    # Try to load from the first subject's RewP results
-    if len(df_stats) > 0:
-        subject = df_stats.iloc[0]['subject']
+    print(f"Loading RewP data from {len(subjects)} subjects...")
+    
+    for subject in subjects:
         rewp_file = os.path.join(OUTPUT_DIR, f'sub-{subject}', 'step08_statistics', 
                                 f'sub-{subject}_rewp_results.txt')
         
         if os.path.exists(rewp_file):
-            with open(rewp_file, 'r') as f:
-                lines = f.readlines()
+            subject_rewp = {}
+            current_condition = None
             
-            for line in lines:
-                if ':' in line and 'RewP' in line:
-                    parts = line.strip().split(':')
-                    if len(parts) >= 2:
-                        condition = parts[0].strip()
+            try:
+                with open(rewp_file, 'r') as f:
+                    lines = f.readlines()
+                
+                # Parse the RewP results
+                for line in lines:
+                    line = line.strip()
+                    
+                    # Identify current condition
+                    if line.endswith(':') and any(task in line for task in ['low_task', 'mid_low_task', 'mid_high_task', 'high_task']):
+                        current_condition = line[:-1]  # Remove the colon
+                    
+                    # Extract RewP amplitude (max)
+                    elif current_condition and 'RewP Amplitude (max):' in line:
                         try:
-                            value = float(parts[1].split('µV')[0].strip())
-                            rewp_data[condition] = value
-                        except:
-                            pass
+                            # Parse: "  RewP Amplitude (max): -0.02 µV"
+                            value_str = line.split('RewP Amplitude (max):')[1].strip()
+                            value = float(value_str.split('µV')[0].strip())
+                            
+                            # Map condition to plot categories
+                            if current_condition == 'low_task':
+                                subject_rewp['Low-Low'] = value
+                            elif current_condition == 'mid_low_task':
+                                subject_rewp['Mid-Low'] = value
+                            elif current_condition == 'mid_high_task':
+                                subject_rewp['Mid-High'] = value
+                            elif current_condition == 'high_task':
+                                subject_rewp['High-High'] = value
+                            
+                            print(f"  Subject {subject} {current_condition}: {value} µV")
+                            
+                        except (ValueError, IndexError) as e:
+                            print(f"    ERROR parsing {current_condition} for subject {subject}: {e}")
+                
+                # Add to group data
+                for condition in rewp_data:
+                    if condition in subject_rewp:
+                        rewp_data[condition].append(subject_rewp[condition])
+                
+            except Exception as e:
+                print(f"  ERROR reading file for subject {subject}: {e}")
+        else:
+            print(f"  No RewP file found for subject {subject}")
+    
+    # Print summary
+    print(f"\nRewP Data Summary:")
+    for condition, values in rewp_data.items():
+        if values:
+            print(f"  {condition}: {len(values)} subjects, mean = {np.mean(values):.2f} µV (range: {np.min(values):.2f} to {np.max(values):.2f})")
+        else:
+            print(f"  {condition}: No data")
     
     return rewp_data
 
@@ -513,7 +628,7 @@ def save_group_results(grand_averages, df_stats, output_dir):
     # Save grand averages
     if grand_averages:
         grand_avg_list = list(grand_averages.values())
-        grand_avg_file = os.path.join(group_dir, f'group_task-{TASK}_grand_avg.fif')
+        grand_avg_file = os.path.join(group_dir, f'group_task-{TASK}_grand-ave.fif')
         mne.write_evokeds(grand_avg_file, grand_avg_list, overwrite=True)
         print(f"Grand averages saved to: {grand_avg_file}")
     
@@ -573,6 +688,9 @@ def main():
     
     # Aggregate statistics
     df_stats = aggregate_statistics(subjects)
+
+    # Diagnose data quality
+    diagnose_data_quality(grand_averages)
     
     # Create group visualizations
     create_group_visualizations(grand_averages, df_stats, OUTPUT_DIR)
