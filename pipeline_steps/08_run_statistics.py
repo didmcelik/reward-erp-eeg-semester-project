@@ -394,7 +394,7 @@ def save_statistics(cluster_results, simple_stats, rewp_results, subject_id, out
         with open(rewp_fname, 'w') as f:
             f.write(f"RewP Analysis Results for Subject {subject_id}\n")
             f.write("="*50 + "\n")
-            f.write("Following Sambrook & Goslin (2015): FCz electrode, 240-340ms window\n\n")
+            f.write("FCz electrode, 240-340ms window\n\n")
             
             for condition, results in rewp_results.items():
                 f.write(f"{condition}:\n")
