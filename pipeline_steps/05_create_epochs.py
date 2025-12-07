@@ -215,7 +215,7 @@ def create_epochs(raw):
     
     print(f"Created {len(epochs)} epochs")
 
-    epochs = apply_mne_baseline_regression(epochs)
+    # epochs = apply_mne_baseline_regression(epochs)
     # epochs = apply_baseline_regression_poly(epochs)
 
     # Apply rejection criteria

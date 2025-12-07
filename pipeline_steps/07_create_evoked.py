@@ -39,14 +39,16 @@ def create_evoked_responses(epochs):
             n_trials = len(epochs[condition])
             if n_trials > 0:
                 evoked = epochs[condition].average()
+
+                evoked.apply_baseline(baseline=(-0.2, 0))
                 
                 # Ensure data is in Volts
-                data_range = np.max(np.abs(evoked.data))
-                if data_range > 1e-3:  # Data is in µV, convert to V
-                    evoked.data = evoked.data / 1e6
-                    print(f"  {condition}: {n_trials} trials (converted µV→V)")
-                else:
-                    print(f"  {condition}: {n_trials} trials (already in V)")
+                # data_range = np.max(np.abs(evoked.data))
+                # if data_range > 1e-3:  # Data is in µV, convert to V
+                #     evoked.data = evoked.data / 1e6
+                #     print(f"  {condition}: {n_trials} trials (converted µV→V)")
+                # else:
+                #     print(f"  {condition}: {n_trials} trials (already in V)")
                 
                 evokeds[condition] = evoked
             else:

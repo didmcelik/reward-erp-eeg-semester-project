@@ -102,17 +102,17 @@ def apply_filters(raw):
     psd_orig = raw.compute_psd(fmax=100)
     
     # Apply Zapline filter for line noise
-    print(f"Applying Zapline filter at {LINE_FREQ} Hz")
-    raw = apply_zapline_filter(raw, line_freq=LINE_FREQ, nremove=4)
+    # print(f"Applying Zapline filter at {LINE_FREQ} Hz")
+    # raw = apply_zapline_filter(raw, line_freq=LINE_FREQ, nremove=4)
     
     # Apply bandpass filter
     print(f"Applying bandpass filter: {L_FREQ}-{H_FREQ} Hz")
     raw.filter(L_FREQ, H_FREQ, fir_design='firwin')
 
     # TEST: Apply notch filter as alternative to Zapline
-    # print(f"Applying notch filter at multiples of {LINE_FREQ} Hz")
-    # raw.notch_filter(np.arange(LINE_FREQ, raw.info['sfreq'] / 2, LINE_FREQ), filter_length='auto', fir_design='firwin', method='fir', verbose=False)
-
+    print(f"Applying notch filter at multiples of {LINE_FREQ} Hz")
+    raw.notch_filter([50, 100], filter_length='auto', fir_design='firwin')
+    
     raw = apply_rereferencing(raw)
     
     # Resample data

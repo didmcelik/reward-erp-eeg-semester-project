@@ -26,24 +26,39 @@ def exclude_learning_trials(epochs, n_exclude=5):
     
     print(f"Excluding first {n_exclude} trials per condition (as learning phase)")
 
+    # Map conditions to their cue types
+    cue_type_mapping = {
+        'low_task_win': 'low_cue',
+        'low_task_loss': 'low_cue', 
+        'mid_low_task_win': 'low_cue',
+        'mid_low_task_loss': 'low_cue',
+        'mid_high_task_win': 'high_cue',
+        'mid_high_task_loss': 'high_cue', 
+        'high_task_win': 'high_cue',
+        'high_task_loss': 'high_cue'
+    }
+    
+    # Group by cue type and exclude first N
     epochs_to_drop = []
     
-    for condition in epochs.event_id:
-        condition_indices = np.where(epochs.events[:, 2] == epochs.event_id[condition])[0]
+    for cue_type in ['low_cue', 'high_cue']:
+        # Get all conditions for this cue type
+        cue_conditions = [cond for cond, cue in cue_type_mapping.items() if cue == cue_type]
         
-        if len(condition_indices) > n_exclude:
-            # Sort by time and take first n_exclude
-            condition_times = [(idx, epochs.events[idx, 0]) for idx in condition_indices]
-            condition_times.sort(key=lambda x: x[1])  # Sort by time
-            
-            first_n_indices = [x[0] for x in condition_times[:n_exclude]]
+        # Collect all epochs for this cue type
+        cue_epochs_indices = []
+        for condition in cue_conditions:
+            if condition in epochs.event_id:
+                condition_indices = np.where(epochs.events[:, 2] == epochs.event_id[condition])[0]
+                cue_epochs_indices.extend([(idx, epochs.events[idx, 0]) for idx in condition_indices])
+        
+        # Sort by time and exclude first N
+        if len(cue_epochs_indices) > n_exclude:
+            cue_epochs_indices.sort(key=lambda x: x[1])  # Sort by time
+            first_n_indices = [x[0] for x in cue_epochs_indices[:n_exclude]]
             epochs_to_drop.extend(first_n_indices)
-            
-            print(f"  {condition}: Excluding first {n_exclude} of {len(condition_indices)} trials")
-        else:
-            print(f"  {condition}: Only {len(condition_indices)} trials, excluding none")
+            print(f"  {cue_type}: Excluding first {n_exclude} of {len(cue_epochs_indices)} trials")
     
-    # Drop the epochs
     if epochs_to_drop:
         epochs.drop(epochs_to_drop, reason='LEARNING_TRIALS')
         print(f"Total learning trials excluded: {len(epochs_to_drop)}")

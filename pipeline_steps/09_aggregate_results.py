@@ -197,10 +197,13 @@ def create_figure_3a(grand_averages, output_dir):
     
     # Plot conditions matching study design
     conditions_to_plot = [
-        ('low_task_win', 'low_task_loss', 'low_low', 'Low-Low'),
-        ('mid_low_task_win', 'mid_low_task_loss', 'mid_low', 'Mid-Low'),
-        ('mid_high_task_win', 'mid_high_task_loss', 'mid_high', 'Mid-High'),
-        ('high_task_win', 'high_task_loss', 'high_high', 'High-High')
+        # LOW-VALUE CUES in different tasks:
+        ('low_task_win', 'low_task_loss', 'low_low', 'Low-Low (Low Cue, Low Task)'),
+        ('mid_low_task_win', 'mid_low_task_loss', 'mid_low', 'Mid-Low (Low Cue, Mid Task)'),
+        
+        # HIGH-VALUE CUES in different tasks:
+        ('mid_high_task_win', 'mid_high_task_loss', 'mid_high', 'Mid-High (High Cue, Mid Task)'),
+        ('high_task_win', 'high_task_loss', 'high_high', 'High-High (High Cue, High Task)')
     ]
     
     for win_cond, loss_cond, color_key, label in conditions_to_plot:
@@ -317,10 +320,13 @@ def create_figure_3c(grand_averages, output_dir):
     
     # Create and plot difference waves
     contrast_pairs = [
-        ('low_task_win', 'low_task_loss', 'low_task', 'Low Task, Low Cue'),
-        ('mid_low_task_win', 'mid_low_task_loss', 'mid_low_task', 'Mid Task, Low Cue'),
-        ('mid_high_task_win', 'mid_high_task_loss', 'mid_high_task', 'Mid Task, High Cue'),
-        ('high_task_win', 'high_task_loss', 'high_task', 'High Task, High Cue')
+        # LOW-VALUE CUES:
+        ('low_task_win', 'low_task_loss', 'low_task', 'Low-Low (Low Cue, Low Task)'),
+        ('mid_low_task_win', 'mid_low_task_loss', 'mid_low_task', 'Mid-Low (Low Cue, Mid Task)'),
+        
+        # HIGH-VALUE CUES (KEY COMPARISON):
+        ('mid_high_task_win', 'mid_high_task_loss', 'mid_high_task', 'Mid-High (High Cue, Mid Task)'),
+        ('high_task_win', 'high_task_loss', 'high_task', 'High-High (High Cue, High Task)')
     ]
     
     for win_cond, loss_cond, color_key, label in contrast_pairs:
@@ -451,25 +457,28 @@ def load_rewp_results(subjects):
                     # Identify current condition
                     if line.endswith(':') and any(task in line for task in ['low_task', 'mid_low_task', 'mid_high_task', 'high_task']):
                         current_condition = line[:-1]  # Remove the colon
+                        print(f"    Found condition: {current_condition}")
                     
-                    # Extract RewP amplitude (max)
-                    elif current_condition and 'RewP Amplitude (max):' in line:
+                    # Extract RewP amplitude
+                    elif current_condition and line.startswith('RewP Amplitude (max):'):
                         try:
-                            # Parse: "  RewP Amplitude (max): -0.02 µV"
+                            # Parse: "RewP Amplitude (max): 3.75 µV"
                             value_str = line.split('RewP Amplitude (max):')[1].strip()
                             value = float(value_str.split('µV')[0].strip())
                             
                             # Map condition to plot categories
                             if current_condition == 'low_task':
                                 subject_rewp['Low-Low'] = value
+                                print(f"    Subject {subject} Low-Low: {value} µV")
                             elif current_condition == 'mid_low_task':
                                 subject_rewp['Mid-Low'] = value
+                                print(f"    Subject {subject} Mid-Low: {value} µV")
                             elif current_condition == 'mid_high_task':
                                 subject_rewp['Mid-High'] = value
+                                print(f"    Subject {subject} Mid-High: {value} µV")
                             elif current_condition == 'high_task':
                                 subject_rewp['High-High'] = value
-                            
-                            print(f"  Subject {subject} {current_condition}: {value} µV")
+                                print(f"    Subject {subject} High-High: {value} µV")
                             
                         except (ValueError, IndexError) as e:
                             print(f"    ERROR parsing {current_condition} for subject {subject}: {e}")
