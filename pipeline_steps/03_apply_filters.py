@@ -93,6 +93,73 @@ def apply_rereferencing(raw):
     
     return raw
 
+def detect_bad_channels(raw):
+    """Detect bad channels using statistical methods"""
+    
+    from scipy import stats
+    
+    print("Detecting bad channels...")
+    
+    # Get EEG data only
+    picks_eeg = mne.pick_types(raw.info, eeg=True, exclude=[])
+    data = raw.get_data(picks=picks_eeg)
+    ch_names = [raw.ch_names[i] for i in picks_eeg]
+    
+    # Calculate channel statistics
+    ch_std = np.std(data, axis=1)
+    ch_range = np.ptp(data, axis=1)
+    ch_kurtosis = np.array([stats.kurtosis(ch_data) for ch_data in data])
+    
+    # Z-score for each metric
+    std_zscore = np.abs(stats.zscore(ch_std))
+    range_zscore = np.abs(stats.zscore(ch_range))
+    kurtosis_zscore = np.abs(stats.zscore(ch_kurtosis))
+    
+    # Mark as bad if any metric exceeds threshold
+    threshold = 3.0  # 3 standard deviations
+    
+    bad_channels = []
+    for i, ch_name in enumerate(ch_names):
+        is_bad = False
+        reasons = []
+        
+        if std_zscore[i] > threshold:
+            is_bad = True
+            reasons.append(f"std_z={std_zscore[i]:.2f}")
+        if range_zscore[i] > threshold:
+            is_bad = True
+            reasons.append(f"range_z={range_zscore[i]:.2f}")
+        if kurtosis_zscore[i] > threshold:
+            is_bad = True
+            reasons.append(f"kurt_z={kurtosis_zscore[i]:.2f}")
+        
+        if is_bad:
+            bad_channels.append(ch_name)
+            print(f"  BAD: {ch_name} - {', '.join(reasons)}")
+    
+    # Mark bad channels in raw
+    if bad_channels:
+        raw.info['bads'] = bad_channels
+        print(f"Detected {len(bad_channels)} bad channels: {bad_channels}")
+    else:
+        print("No bad channels detected")
+    
+    return raw, bad_channels
+
+
+def interpolate_bad_channels(raw):
+    """Interpolate bad channels"""
+    
+    if raw.info['bads']:
+        print(f"Interpolating {len(raw.info['bads'])} bad channels: {raw.info['bads']}")
+        raw.interpolate_bads(reset_bads=True)
+        print("Bad channels interpolated")
+    else:
+        print("No bad channels to interpolate")
+    
+    return raw
+
+
 def apply_filters(raw):
     """Apply bandpass and Zapline filters"""
     
@@ -108,11 +175,12 @@ def apply_filters(raw):
     # Apply bandpass filter
     print(f"Applying bandpass filter: {L_FREQ}-{H_FREQ} Hz")
     raw.filter(L_FREQ, H_FREQ, fir_design='firwin')
-
-    # TEST: Apply notch filter as alternative to Zapline
-    # print(f"Applying notch filter at multiples of {LINE_FREQ} Hz")
-    # raw.notch_filter([50, 100], filter_length='auto', fir_design='firwin')
     
+    # Detect and interpolate bad channels before re-referencing
+    raw, bad_channels = detect_bad_channels(raw)
+    raw = interpolate_bad_channels(raw)
+    
+    # Apply re-referencing (with clean channels)
     raw = apply_rereferencing(raw)
     
     # Resample data

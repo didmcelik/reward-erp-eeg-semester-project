@@ -257,7 +257,7 @@ def apply_ica_and_save(ica, raw, subject_id, output_dir):
     raw_clean = ica.apply(raw.copy())
     
     # Interpolate bad channels after ICA
-    raw_clean = detect_and_interpolate_bad_channels(raw_clean)
+    # raw_clean = detect_and_interpolate_bad_channels(raw_clean)
     
     # Save results
     ica_fname = os.path.join(subject_dir, f'sub-{subject_id}_task-{TASK}_ica.fif')
