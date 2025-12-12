@@ -40,15 +40,29 @@ def create_evoked_responses(epochs):
             if n_trials > 0:
                 evoked = epochs[condition].average()
 
+                # Apply baseline correction (-200 to 0 ms)
                 evoked.apply_baseline(baseline=(-0.2, 0))
+
+                if 'FCz' in evoked.ch_names:
+                    fcz_idx = evoked.ch_names.index('FCz')
+                    fcz_data = evoked.data[fcz_idx, :]
+                    
+                    # Check FCz in the P300/RewP window (200-400ms)
+                    time_mask = (evoked.times >= 0.2) & (evoked.times <= 0.4)
+                    if np.any(time_mask):
+                        windowed_data = fcz_data[time_mask]
+                        peak_val = windowed_data[np.argmax(np.abs(windowed_data))]
+                        
+                        # Diagnostic info
+                        print(f"  {condition}: {n_trials} trials, FCz peak in 200-400ms: {peak_val*1e6:.2f}µV")
                 
                 # Ensure data is in Volts
-                # data_range = np.max(np.abs(evoked.data))
-                # if data_range > 1e-3:  # Data is in µV, convert to V
-                #     evoked.data = evoked.data / 1e6
-                #     print(f"  {condition}: {n_trials} trials (converted µV→V)")
-                # else:
-                #     print(f"  {condition}: {n_trials} trials (already in V)")
+                data_range = np.max(np.abs(evoked.data))
+                if data_range > 1e-3:  # Data is in µV, convert to V
+                    evoked.data = evoked.data / 1e6
+                    print(f"  {condition}: {n_trials} trials (converted µV→V)")
+                else:
+                    print(f"  {condition}: {n_trials} trials (already in V)")
                 
                 evokeds[condition] = evoked
             else:

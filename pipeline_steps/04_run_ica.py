@@ -201,15 +201,36 @@ def visualize_ica_results(ica, filt_raw, raw_clean, raw_original, subject_id, ou
     except Exception as e:
         print(f"Could not plot components: {e}")
     
-    # 2. Plot excluded component properties
+    # 2. Plot excluded components properties 
     if ica.exclude:
-        for comp in ica.exclude[:3]:  # First 3 excluded
+        print(f"Plotting {len(ica.exclude)} excluded components: {ica.exclude}")
+        
+        # Plot each excluded component individually
+        for comp in ica.exclude:
             try:
-                fig = ica.plot_properties(filt_raw, picks=comp, show=False)
-                fig.savefig(os.path.join(subject_dir, f'excluded_IC{comp:02d}.png'), dpi=300)
-                plt.close()
+                fig = ica.plot_properties(filt_raw, picks=[comp], show=False)
+                fig.suptitle(f'Sub-{subject_id} - Excluded Component IC{comp:02d}', fontsize=14)
+                fig.savefig(os.path.join(subject_dir, f'excluded_IC{comp:02d}_properties.png'), 
+                           dpi=300, bbox_inches='tight')
+                plt.close(fig)
+                print(f"IC{comp:02d} properties saved")
             except Exception as e:
                 print(f"Could not plot component {comp}: {e}")
+        
+        # Create a summary plot of excluded components
+        try:
+            n_excluded = len(ica.exclude)
+            if n_excluded <= 6:
+                fig = ica.plot_components(picks=ica.exclude, show=False, 
+                                        title=f'Sub-{subject_id} - EXCLUDED Components')
+                fig.savefig(os.path.join(subject_dir, 'excluded_components_summary.png'), 
+                           dpi=300, bbox_inches='tight')
+                plt.close(fig)
+                print(f"Excluded components summary saved")
+        except Exception as e:
+            print(f"Could not create excluded components summary: {e}")
+    else:
+        print("No components excluded")
     
     # 3. Before/after overlay comparison
     try:

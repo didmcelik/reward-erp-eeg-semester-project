@@ -252,36 +252,7 @@ def visualize_rejection(epochs, epochs_clean, reject_log, ar, subject_id, output
     plt.savefig(os.path.join(subject_dir, 'trial_counts_comparison.png'), dpi=300)
     plt.close()
     
-    create_simple_comparison_plot(epochs, epochs_clean, subject_dir, subject_id)
-    
     print(f"Rejection visualizations saved to: {subject_dir}")
-
-def create_simple_comparison_plot(epochs, epochs_clean, subject_dir, subject_id):
-    """Create a simple comparison plot without complex subplots"""
-    
-    try:
-        # Create a 2x2 comparison using averages
-        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
-        
-        # Plot 1: Original average at FCz
-        epochs.average().plot_topo(axes=axes[0,0], show=False, title='Original - Topo')
-        
-        # Plot 2: Clean average at FCz  
-        epochs_clean.average().plot_topo(axes=axes[0,1], show=False, title='Clean - Topo')
-        
-        # Plot 3: Original average butterfly
-        epochs.average().plot(axes=axes[1,0], show=False, titles='Original - All Channels')
-        
-        # Plot 4: Clean average butterfly
-        epochs_clean.average().plot(axes=axes[1,1], show=False, titles='Clean - All Channels')
-        
-        plt.tight_layout()
-        fig.suptitle(f'Sub-{subject_id} Before/After AutoReject - Detailed Comparison', y=1.02)
-        plt.savefig(os.path.join(subject_dir, 'detailed_comparison.png'), dpi=300)
-        plt.close()
-        
-    except Exception as e:
-        print(f"Could not create simple comparison plot: {e}")
 
 
 def save_clean_epochs(epochs_clean, reject_log, ar, subject_id, output_dir):

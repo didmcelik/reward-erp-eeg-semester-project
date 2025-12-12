@@ -65,8 +65,14 @@ def analyze_rewp_amplitudes(evokeds, subject_id):
     for condition_name, win_cond, loss_cond in conditions:
         if win_cond in evokeds and loss_cond in evokeds:
 
+            win_evoked = evokeds[win_cond].copy()
+            loss_evoked = evokeds[loss_cond].copy()
+
+            # win_evoked.apply_baseline(baseline=(-0.2, 0))
+            # loss_evoked.apply_baseline(baseline=(-0.2, 0))
+
             # Create difference wave (Win - Loss)
-            diff_evoked = mne.combine_evoked([evokeds[win_cond], evokeds[loss_cond]], 
+            diff_evoked = mne.combine_evoked([win_evoked, loss_evoked], 
                                            weights=[1, -1])
             diff_evoked.apply_baseline(baseline=(-0.2, 0))
             
@@ -184,10 +190,12 @@ def run_simple_statistics(evokeds):
     for condition, evoked in evokeds.items():
         
         data_range = np.max(np.abs(evoked.data))
-        if data_range < 1e-3:  # Data is in Volts
-            evoked_data_uv = evoked.data * 1e6  # Convert to µV
+        if data_range < 1e-4:  # Data is in Volts
+             evoked_data_uv = evoked.data * 1e6  # Convert to µV
+             print(f"Converted {condition} from V to µV (range: {data_range:.2e})")
         else:  # Data already in µV
             evoked_data_uv = evoked.data
+            print(f"{condition} already in µV (range: {data_range:.2e})")
 
         # Find peak amplitude at FCz specifically
         if 'FCz' in evoked.ch_names:
@@ -199,9 +207,19 @@ def run_simple_statistics(evokeds):
             fcz_windowed = fcz_data[time_mask]
             
             if len(fcz_windowed) > 0:
-                peak_idx_windowed = np.argmax(np.abs(fcz_windowed))
-                peak_time = evoked.times[time_mask][peak_idx_windowed]
-                peak_amplitude = fcz_windowed[peak_idx_windowed]
+                # Find positive peak (for P300/RewP analysis)
+                positive_peak_idx = np.argmax(fcz_windowed)  # Maximum (most positive)
+                positive_peak_amplitude = fcz_windowed[positive_peak_idx]
+                positive_peak_time = evoked.times[time_mask][positive_peak_idx]
+                
+                # Also find negative peak (for N200/FRN analysis)
+                negative_peak_idx = np.argmin(fcz_windowed)  # Minimum (most negative)
+                negative_peak_amplitude = fcz_windowed[negative_peak_idx]
+                negative_peak_time = evoked.times[time_mask][negative_peak_idx]
+                
+                # Use positive peak as primary (for RewP analysis)
+                peak_time = positive_peak_time
+                peak_amplitude = positive_peak_amplitude
             else:
                 peak_time = evoked.times[np.argmax(np.abs(fcz_data))]
                 peak_amplitude = fcz_data[np.argmax(np.abs(fcz_data))]

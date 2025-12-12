@@ -14,6 +14,7 @@ OUTPUT_DIR = "../output/derivatives/manual-pipeline"
 TASK = "casinos"
 ALL_SUBJECTS = ['27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38']
 
+
 def find_processed_subjects():
     """Find all subjects that have completed processing"""
     
@@ -125,35 +126,91 @@ def aggregate_statistics(subjects):
     print("Aggregating statistical results...")
     
     for subject in subjects:
-        stats_file = os.path.join(OUTPUT_DIR, f'sub-{subject}', 'step08_statistics', 
-                                 f'sub-{subject}_simple_stats.txt')
+        rewp_file = os.path.join(OUTPUT_DIR, f'sub-{subject}', 'step08_statistics', 
+                                f'sub-{subject}_rewp_results.txt')
         
-        if os.path.exists(stats_file):
-            # Parse simple statistics file
-            with open(stats_file, 'r') as f:
-                lines = f.readlines()
-            
-            current_condition = None
+        if os.path.exists(rewp_file):
             subject_stats = {'subject': subject}
             
-            for line in lines:
-                line = line.strip()
-                if line and not line.startswith('=') and not line.startswith('Simple'):
-                    if line.endswith(':') and not line.startswith(' '):
+            try:
+                with open(rewp_file, 'r') as f:
+                    lines = f.readlines()
+                
+                current_condition = None
+                
+                # Parse RewP results
+                for line in lines:
+                    line = line.strip()
+                    
+                    # Find condition headers
+                    if line.endswith(':') and any(task in line for task in ['low_task', 'mid_low_task', 'mid_high_task', 'high_task']):
                         current_condition = line[:-1]
-                    elif current_condition and line.startswith('  Peak amplitude:'):
-                        amplitude = float(line.split(':')[1].split()[0])
-                        subject_stats[f'{current_condition}_peak_amp'] = amplitude
-                    elif current_condition and line.startswith('  Peak time:'):
-                        time = float(line.split(':')[1].split()[0])
-                        subject_stats[f'{current_condition}_peak_time'] = time
-            
-            all_stats.append(subject_stats)
+                    
+                    # Extract statistics
+                    elif current_condition:
+                        if line.startswith('RewP Amplitude (max):'):
+                            value = float(line.split(':')[1].strip().split()[0])
+                            subject_stats[f'{current_condition}_rewp_max'] = value
+                        
+                        elif line.startswith('Mean Amplitude:'):
+                            value = float(line.split(':')[1].strip().split()[0])
+                            subject_stats[f'{current_condition}_rewp_mean'] = value
+                        
+                        elif line.startswith('Peak Time:'):
+                            value = float(line.split(':')[1].strip().split()[0])
+                            subject_stats[f'{current_condition}_peak_time'] = value
+                
+                # Add derived statistics for study comparison
+                if all(f'{cond}_rewp_max' in subject_stats for cond in ['low_task', 'mid_low_task', 'mid_high_task', 'high_task']):
+                    # Main effect: Mid-High vs High-High
+                    subject_stats['main_effect_rewp'] = subject_stats['mid_high_task_rewp_max'] - subject_stats['high_task_rewp_max']
+                    
+                    # Control effect: Low-Low vs Mid-Low
+                    subject_stats['control_effect_rewp'] = subject_stats['low_task_rewp_max'] - subject_stats['mid_low_task_rewp_max']
+                    
+                    # Overall RewP magnitude
+                    subject_stats['mean_rewp_all'] = np.mean([
+                        subject_stats['low_task_rewp_max'],
+                        subject_stats['mid_low_task_rewp_max'],
+                        subject_stats['mid_high_task_rewp_max'],
+                        subject_stats['high_task_rewp_max']
+                    ])
+                
+                all_stats.append(subject_stats)
+                print(f"  Loaded statistics for subject {subject}")
+                
+            except Exception as e:
+                print(f"  ERROR parsing RewP file for subject {subject}: {e}")
+        else:
+            print(f"  No RewP file found for subject {subject}")
     
     # Convert to DataFrame
     if all_stats:
         df_stats = pd.DataFrame(all_stats)
         print(f"  Collected statistics from {len(all_stats)} subjects")
+        
+        # Print summary
+        print(f"\n=== GROUP STATISTICS SUMMARY ===")
+        
+        # Key study findings
+        if 'main_effect_rewp' in df_stats.columns:
+            main_effect_mean = df_stats['main_effect_rewp'].mean()
+            main_effect_std = df_stats['main_effect_rewp'].std()
+            print(f"Main Effect (Mid-High - High-High): {main_effect_mean:.2f} ± {main_effect_std:.2f} µV")
+        
+        if 'control_effect_rewp' in df_stats.columns:
+            control_effect_mean = df_stats['control_effect_rewp'].mean()
+            control_effect_std = df_stats['control_effect_rewp'].std()
+            print(f"Control Effect (Low-Low - Mid-Low): {control_effect_mean:.2f} ± {control_effect_std:.2f} µV")
+        
+        # Individual condition means
+        for condition in ['low_task', 'mid_low_task', 'mid_high_task', 'high_task']:
+            col_name = f'{condition}_rewp_max'
+            if col_name in df_stats.columns:
+                condition_mean = df_stats[col_name].mean()
+                condition_std = df_stats[col_name].std()
+                print(f"{condition.replace('_', '-').title()}: {condition_mean:.2f} ± {condition_std:.2f} µV")
+        
         return df_stats
     else:
         print("  No statistics found")
@@ -187,9 +244,9 @@ def create_figure_3a(grand_averages, output_dir):
     
     # Define colors and styles matching the study
     colors = {
-        'low_low': '#FF6B6B',      # Red for Low-Low
+        'low_low': "#FF9B9B",      # Red for Low-Low
         'mid_low': '#66B2FF',      # Blue for Mid-Low  
-        'mid_high': '#FF6666',     # Red for Mid-High
+        'mid_high': "#FB4B4B",     # Red for Mid-High
         'high_high': '#3366FF'     # Blue for High-High
     }
 
@@ -324,7 +381,7 @@ def create_figure_3c(grand_averages, output_dir):
         ('low_task_win', 'low_task_loss', 'low_task', 'Low-Low (Low Cue, Low Task)'),
         ('mid_low_task_win', 'mid_low_task_loss', 'mid_low_task', 'Mid-Low (Low Cue, Mid Task)'),
         
-        # HIGH-VALUE CUES (KEY COMPARISON):
+        # HIGH-VALUE CUES:
         ('mid_high_task_win', 'mid_high_task_loss', 'mid_high_task', 'Mid-High (High Cue, Mid Task)'),
         ('high_task_win', 'high_task_loss', 'high_task', 'High-High (High Cue, High Task)')
     ]
@@ -358,7 +415,7 @@ def create_figure_3c(grand_averages, output_dir):
     ax.axvspan(0.240, 0.340, alpha=0.15, color='gray', 
                label='Analysis Window (240-340ms)', zorder=0)
     
-    # Formatting to match authors EXACTLY
+    # Formatting to match authors
     ax.set_xlabel('Time (s)', fontsize=12)
     ax.set_ylabel('Voltage (µV)', fontsize=12)  
     ax.set_title('FCz', fontsize=14, fontweight='bold')
@@ -456,7 +513,7 @@ def load_rewp_results(subjects):
                     
                     # Identify current condition
                     if line.endswith(':') and any(task in line for task in ['low_task', 'mid_low_task', 'mid_high_task', 'high_task']):
-                        current_condition = line[:-1]  # Remove the colon
+                        current_condition = line[:-1]
                         print(f"    Found condition: {current_condition}")
                     
                     # Extract RewP amplitude
@@ -553,7 +610,6 @@ def create_group_visualizations(grand_averages, df_stats, output_dir):
                 loss_cond = f'{level}_loss'
                 
                 if win_cond in grand_averages and loss_cond in grand_averages and i < 4:
-                    # FIXED: Plot manually to control colors and styles
                     win_evoked = grand_averages[win_cond]
                     loss_evoked = grand_averages[loss_cond]
                     
