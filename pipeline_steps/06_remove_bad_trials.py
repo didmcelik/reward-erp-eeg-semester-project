@@ -7,7 +7,7 @@ import argparse
 import mne
 import numpy as np
 import matplotlib.pyplot as plt
-from autoreject import AutoReject, get_rejection_threshold
+from autoreject import AutoReject
 
 OUTPUT_DIR = "../output/derivatives/manual-pipeline"
 TASK = "casinos"
@@ -65,42 +65,6 @@ def exclude_learning_trials(epochs, n_exclude=5):
     
     return epochs
 
-
-def apply_artifact_detection(epochs):
-    """Apply artifact detection"""
-    
-    print("Applying artifact detection...")
-    
-    reject_criteria = {
-        'eeg': 150e-6,     # or try 75µV
-    }
-    
-    flat_criteria = {
-        'eeg': 1e-6
-    }
-    
-    # Apply rejection
-    epochs.drop_bad(reject=reject_criteria, flat=flat_criteria)
-    
-    # Additional step: remove epochs with excessive drift
-    data = epochs.get_data()
-    bad_epochs = []
-    
-    for epoch_idx in range(len(epochs)):
-        epoch_data = data[epoch_idx]
-        
-        # Check for excessive between-sample differences
-        max_diff = np.max(np.abs(np.diff(epoch_data, axis=1)))
-        if max_diff > 40e-6:  # Use 40µV threshold
-            bad_epochs.append(epoch_idx)
-    
-    if bad_epochs:
-        epochs.drop(bad_epochs, reason='EXCESSIVE_DRIFT')
-        print(f"Dropped {len(bad_epochs)} epochs with excessive drift")
-    
-    return epochs
-
-
 def remove_bad_trials(epochs):
     """Remove bad trials using AutoReject"""
     
@@ -108,9 +72,6 @@ def remove_bad_trials(epochs):
 
     # Exclude learning trials
     epochs = exclude_learning_trials(epochs, n_exclude=5)
-
-    # Apply additional artifact detection
-    # epochs = apply_artifact_detection(epochs)
     
     # AutoReject for interpolation and rejection
     ar = AutoReject(

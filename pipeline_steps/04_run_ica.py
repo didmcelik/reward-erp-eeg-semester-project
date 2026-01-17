@@ -68,7 +68,7 @@ def create_epochs_for_ica(filt_raw):
     epochs = mne.Epochs(
         filt_raw, events, ica_event_id,
         tmin=0.0, tmax=3.0,  # ICA training window: 0-3s from cue
-        baseline=None,        # No baseline for ICA training
+        baseline=None, # No baseline for ICA training
         reject={'eeg': 200e-6}, 
         flat={'eeg': 1e-6},
         preload=True,
@@ -115,7 +115,6 @@ def classify_components(ica, filt_raw):
     
     exclude_components = []
     
-    
     try:
         print("Running ICLabel classification...")
         
@@ -126,7 +125,7 @@ def classify_components(ica, filt_raw):
         for i, label in enumerate(labels):
             print(f"  IC{i:02d}: {label}")
         
-        # Exclude non-brain components (conservative approach)
+        # Exclude non-brain components
         exclude_idx = [
             idx for idx, label in enumerate(labels) 
             if label not in ['brain', 'other']
@@ -141,49 +140,10 @@ def classify_components(ica, filt_raw):
     # Remove duplicates and sort
     exclude_components = sorted(list(set(exclude_components)))
     
-    # Safety check - don't exclude too many components
-    # max_exclude = n_components // 3  # Max 1/3 of components
-    # if len(exclude_components) > max_exclude:
-    #     print(f"Warning: Too many exclusions ({len(exclude_components)}). Limiting to {max_exclude}")
-    #     exclude_components = exclude_components[:max_exclude]
-    
     ica.exclude = exclude_components
     print(f"Final excluded components: {ica.exclude}")
     
     return ica
-
-def detect_and_interpolate_bad_channels(raw):
-    """Detect and interpolate bad channels"""
-    
-    print("Checking for bad channels...")
-    
-    # Simple bad channel detection based on variance
-    data = raw.get_data()
-    channel_vars = np.var(data, axis=1)
-    
-    # Channels with extremely high or low variance
-    median_var = np.median(channel_vars)
-    mad = np.median(np.abs(channel_vars - median_var))
-    
-    # Define outliers (very conservative)
-    lower_bound = median_var - 5 * mad
-    upper_bound = median_var + 5 * mad
-    
-    bad_channels = []
-    for i, ch_name in enumerate(raw.ch_names):
-        if raw.get_channel_types([ch_name])[0] == 'eeg':
-            if channel_vars[i] < lower_bound or channel_vars[i] > upper_bound:
-                bad_channels.append(ch_name)
-    
-    if bad_channels:
-        print(f"Detected bad channels: {bad_channels}")
-        raw.info['bads'] = bad_channels
-        raw.interpolate_bads(reset_bads=True)
-        print(f"Interpolated {len(bad_channels)} bad channels")
-    else:
-        print("No bad channels detected")
-    
-    return raw
 
 def visualize_ica_results(ica, filt_raw, raw_clean, raw_original, subject_id, output_dir):
     """Create essential ICA visualizations"""
@@ -255,9 +215,6 @@ def apply_ica_and_save(ica, raw, subject_id, output_dir):
     
     # Apply ICA to original filtered data
     raw_clean = ica.apply(raw.copy())
-    
-    # Interpolate bad channels after ICA
-    # raw_clean = detect_and_interpolate_bad_channels(raw_clean)
     
     # Save results
     ica_fname = os.path.join(subject_dir, f'sub-{subject_id}_task-{TASK}_ica.fif')

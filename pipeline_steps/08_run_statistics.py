@@ -68,9 +68,6 @@ def analyze_rewp_amplitudes(evokeds, subject_id):
             win_evoked = evokeds[win_cond].copy()
             loss_evoked = evokeds[loss_cond].copy()
 
-            # win_evoked.apply_baseline(baseline=(-0.2, 0))
-            # loss_evoked.apply_baseline(baseline=(-0.2, 0))
-
             # Create difference wave (Win - Loss)
             diff_evoked = mne.combine_evoked([win_evoked, loss_evoked], 
                                            weights=[1, -1])
@@ -212,11 +209,6 @@ def run_simple_statistics(evokeds):
                 positive_peak_amplitude = fcz_windowed[positive_peak_idx]
                 positive_peak_time = evoked.times[time_mask][positive_peak_idx]
                 
-                # Also find negative peak (for N200/FRN analysis)
-                negative_peak_idx = np.argmin(fcz_windowed)  # Minimum (most negative)
-                negative_peak_amplitude = fcz_windowed[negative_peak_idx]
-                negative_peak_time = evoked.times[time_mask][negative_peak_idx]
-                
                 # Use positive peak as primary (for RewP analysis)
                 peak_time = positive_peak_time
                 peak_amplitude = positive_peak_amplitude
@@ -343,32 +335,6 @@ def visualize_statistics(cluster_results, epochs, evokeds, rewp_results, subject
         plt.savefig(os.path.join(subject_dir, 'rewp_analysis.png'), dpi=300)
         plt.close()
     
-    # Plot peak amplitudes
-    conditions = list(evokeds.keys())
-    peak_amps = [np.max(np.abs(evoked.data)) for evoked in evokeds.values()]
-    peak_times = [evoked.times[np.argmax(np.abs(evoked.data.mean(axis=0)))] 
-                  for evoked in evokeds.values()]
-    
-    x = np.arange(len(conditions))
-    bars = axes[0].bar(x, peak_amps, alpha=0.7)
-    axes[0].set_xlabel('Conditions')
-    axes[0].set_ylabel('Peak Amplitude (µV)')
-    axes[0].set_title(f'Sub-{subject_id} Peak Amplitudes')
-    axes[0].set_xticks(x)
-    axes[0].set_xticklabels(conditions, rotation=45, ha='right')
-    
-    # Plot peak times
-    bars = axes[1].bar(x, [t*1000 for t in peak_times], alpha=0.7)
-    axes[1].set_xlabel('Conditions')
-    axes[1].set_ylabel('Peak Time (ms)')
-    axes[1].set_title(f'Sub-{subject_id} Peak Times')
-    axes[1].set_xticks(x)
-    axes[1].set_xticklabels(conditions, rotation=45, ha='right')
-    
-    plt.tight_layout()
-    plt.savefig(os.path.join(subject_dir, 'peak_statistics.png'), dpi=300)
-    plt.close()
-    
     print(f"Statistical visualizations saved to: {subject_dir}")
 
 def save_statistics(cluster_results, simple_stats, rewp_results, subject_id, output_dir):
@@ -424,32 +390,6 @@ def save_statistics(cluster_results, simple_stats, rewp_results, subject_id, out
     
     return subject_dir
 
-
-def debug_epoch_info(evokeds, subject_id):
-    """Debug function to check epoch parameters"""
-    
-    print(f"\n=== DEBUG: Epoch Info for Subject {subject_id} ===")
-    
-    for condition, evoked in evokeds.items():
-        print(f"{condition}:")
-        print(f"  Data shape: {evoked.data.shape}")
-        print(f"  Time range: {evoked.times[0]:.3f} to {evoked.times[-1]:.3f}s")
-        print(f"  Sampling rate: {evoked.info['sfreq']} Hz")
-        print(f"  N samples: {len(evoked.times)}")
-        print(f"  Expected samples for -0.2 to 0.6s: {int(0.8 * evoked.info['sfreq'])}")
-        
-        # Check if 240-340ms window exists
-        time_mask_240_340 = (evoked.times >= 0.240) & (evoked.times <= 0.340)
-        print(f"  240-340ms window available: {np.any(time_mask_240_340)} ({np.sum(time_mask_240_340)} samples)")
-        
-        if 'FCz' in evoked.ch_names:
-            fcz_idx = evoked.ch_names.index('FCz')
-            data_range = np.max(np.abs(evoked.data[fcz_idx, :]))
-            print(f"  FCz data range: {data_range:.2e} (likely {'µV' if data_range > 1e-3 else 'V'})")
-        
-        print()
-
-
 def main():
     parser = argparse.ArgumentParser(description='Step 8: Run statistical tests')
     parser.add_argument('--subject', required=True, help='Subject ID')
@@ -461,9 +401,6 @@ def main():
     
     # Load data from previous steps
     epochs, evokeds = load_previous_step(subject_id)
-
-    # Debug epoch info
-    debug_epoch_info(evokeds, subject_id)
 
     # Analyze RewP amplitudes
     rewp_results = analyze_rewp_amplitudes(evokeds, subject_id)

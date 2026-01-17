@@ -26,45 +26,6 @@ def load_previous_step(subject_id):
     return raw
 
 
-# def apply_baseline_regression(epochs):
-#     """Apply baseline regression""
-    
-#     print("Applying baseline regression to remove slow drifts...")
-    
-#     # Get baseline period data
-#     baseline_start = -0.2
-#     baseline_end = 0.0
-    
-#     # Method 1: Use MNE's built-in regression approach
-#     epochs_reg = epochs.copy()
-    
-#     # Get baseline indices
-#     baseline_mask = (epochs.times >= baseline_start) & (epochs.times <= baseline_end)
-    
-#     # For each epoch and channel, fit linear regression in baseline
-#     data = epochs_reg.get_data()  # Shape: (n_epochs, n_channels, n_times)
-    
-#     for epoch_idx in range(data.shape[0]):
-#         for ch_idx in range(data.shape[1]):
-#             epoch_data = data[epoch_idx, ch_idx, :]
-#             baseline_data = epoch_data[baseline_mask]
-#             baseline_times = epochs.times[baseline_mask]
-            
-#             # Fit linear regression to baseline
-#             from scipy.stats import linregress
-#             slope, intercept, _, _, _ = linregress(baseline_times, baseline_data)
-            
-#             # Remove linear trend from entire epoch
-#             predicted_trend = slope * epochs.times + intercept
-#             data[epoch_idx, ch_idx, :] -= predicted_trend
-    
-#     # Update epochs with regression-corrected data
-#     epochs_reg._data = data
-    
-#     print(f"Baseline regression applied to {len(epochs_reg)} epochs")
-#     return epochs_reg
-
-
 def apply_mne_baseline_regression(epochs):
     """Use MNE's regression baseline method"""
     
@@ -96,7 +57,6 @@ def apply_mne_baseline_regression(epochs):
     return epochs_reg
 
 
-
 def apply_baseline_regression_poly(epochs):
     """Apply baseline correction and additional regression to remove slow drifts"""
     
@@ -120,7 +80,6 @@ def apply_baseline_regression_poly(epochs):
     
     epochs_corrected._data = data
     return epochs_corrected
-
 
 
 def apply_rejection_criteria(epochs):
@@ -215,12 +174,6 @@ def create_epochs(raw):
     
     print(f"Created {len(epochs)} epochs")
 
-    # epochs = apply_mne_baseline_regression(epochs)
-    # epochs = apply_baseline_regression_poly(epochs)
-
-    # Apply rejection criteria
-    # epochs = apply_rejection_criteria(epochs)
-
     # Timing diagnostic
     print("\n=== EVENT TIMING DIAGNOSTIC ===")
     outcome_events_array = events[np.isin(events[:, 2], list(outcome_event_id.values()))]
@@ -228,7 +181,6 @@ def create_epochs(raw):
         intervals = np.diff(outcome_events_array[:, 0]) / raw.info['sfreq']
         print(f"Mean interval between outcome events: {np.mean(intervals):.2f}s")
         print(f"Min/Max intervals: {np.min(intervals):.2f}s / {np.max(intervals):.2f}s")
-    
 
     print("Applying gradient-based rejection (study criterion: 40 µV/sample)...")
     epochs = apply_gradient_rejection(epochs, threshold=40e-6)

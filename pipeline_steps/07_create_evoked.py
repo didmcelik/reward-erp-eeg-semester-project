@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 OUTPUT_DIR = "../output/derivatives/manual-pipeline"
 TASK = "casinos"
 
-# Conditions from config
 CONDITIONS = [
     'low_task_win', 'low_task_loss',
     'mid_low_task_win', 'mid_low_task_loss',

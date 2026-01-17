@@ -14,6 +14,11 @@ OUTPUT_DIR = "../output/derivatives/manual-pipeline"
 TASK = "casinos"
 ALL_SUBJECTS = ['27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38']
 
+# learners = [4,6,7,8,10,11,13,14,15,16,17,19,21,22,23,26,27,28,31,34,35,36,37,38];
+# nonLearners = [3 5 9 12 20 24 25 29 30 32 33];
+
+# LEARNERS = ['28', '31', '34', '35', '36', '37', '38']
+
 
 def find_processed_subjects():
     """Find all subjects that have completed processing"""
@@ -240,7 +245,7 @@ def create_study_replication_plots(grand_averages, df_stats, output_dir):
 def create_figure_3a(grand_averages, output_dir):
     """Create Figure 3a: Win/loss waveforms by task and cue value"""
     
-    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+    fig, ax = plt.subplots(1, 1, figsize=(18, 6))
     
     # Define colors and styles matching the study
     colors = {
@@ -306,10 +311,7 @@ def create_figure_3a(grand_averages, output_dir):
     ax.axvline(0, color='black', linewidth=0.8)
     ax.grid(True, alpha=0.3)
     ax.set_xlim(-0.2, 0.6)
-    ax.set_ylim(-10, 15)  # Match authors' range
-    
-    # Add shaded analysis window
-    ax.axvspan(0.240, 0.340, alpha=0.1, color='gray', label='Analysis Window')
+    ax.set_ylim(-5, 20)  # Match authors' range
     
     # Legend in style of study
     ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
@@ -346,7 +348,7 @@ def create_figure_3b(grand_averages, output_dir):
         grand_diff = mne.grand_average(all_diff_evokeds)
         
         # Create topography plot for RewP window (240-340ms)
-        fig = grand_diff.plot_topomap(times=[0.29], # Peak of RewP window
+        fig = grand_diff.plot_topomap(times=[0.25], # Peak of RewP window
                                      show=False, 
                                      cmap='RdBu_r',
                                      size=4)
@@ -354,43 +356,69 @@ def create_figure_3b(grand_averages, output_dir):
         plt.savefig(os.path.join(output_dir, 'figure_3b_scalp_topography.png'), 
                     dpi=300, bbox_inches='tight')
         plt.close()
+        
+        print("Figure 3b created")
+        
+        # Also create a time series of topographies to see evolution
+        times_to_plot = [0.2, 0.25, 0.29, 0.35, 0.4]
+        fig, axes = plt.subplots(1, len(times_to_plot), figsize=(15, 3))
+        
+        vlim_uv = 5.0 # Cap at 5µV
+
+        for i, time_point in enumerate(times_to_plot):
+            time_idx = np.argmin(np.abs(grand_diff.times - time_point))
+            actual_time = grand_diff.times[time_idx]
+            
+            im, _ = mne.viz.plot_topomap(
+                grand_diff.data[:, time_idx], 
+                grand_diff.info, 
+                axes=axes[i],
+                show=False,
+                cmap='RdBu_r',
+                vlim=(-vlim_uv*1e-6, vlim_uv*1e-6),
+                size=3
+            )
+            
+            axes[i].set_title(f'{actual_time*1000:.0f} ms', fontsize=12)
+        
+        # Add shared colorbar
+        cbar = fig.colorbar(im, ax=axes, shrink=0.8, aspect=20, pad=0.02)
+        cbar.set_label('Voltage (µV)', rotation=270, labelpad=20)
+        cbar_ticks = cbar.get_ticks()
+        cbar.set_ticklabels([f'{tick*1e6:.1f}' for tick in cbar_ticks])
+        
+        fig.suptitle('Win-Loss Difference Evolution', fontsize=14, fontweight='bold')
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, 'figure_3b_topography_evolution.png'), 
+                    dpi=300, bbox_inches='tight')
+        plt.close()
+        
+    else:
+        print("No difference waves available for topography")
 
 def create_figure_3c(grand_averages, output_dir):
     """Create Figure 3c: Difference waveforms (RewP)"""
     
-    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+    fig, ax = plt.subplots(1, 1, figsize=(12, 6))
     
-    # Define colors for difference waves
-    colors = {
-        'low_task': '#E74C3C',      # Red
-        'mid_low_task': '#3498DB',  # Blue  
-        'mid_high_task': '#9B59B6', # Purple
-        'high_task': '#2ECC71'      # Green
-    }
-    
-    line_styles = {
-        'low_task': '-',           # Solid
-        'mid_low_task': '--',      # Dashed
-        'mid_high_task': ':',      # Dotted
-        'high_task': '-'           # Solid
-    }
-    
-    # Create and plot difference waves
-    contrast_pairs = [
-        # LOW-VALUE CUES:
-        ('low_task_win', 'low_task_loss', 'low_task', 'Low-Low (Low Cue, Low Task)'),
-        ('mid_low_task_win', 'mid_low_task_loss', 'mid_low_task', 'Mid-Low (Low Cue, Mid Task)'),
-        
-        # HIGH-VALUE CUES:
-        ('mid_high_task_win', 'mid_high_task_loss', 'mid_high_task', 'Mid-High (High Cue, Mid Task)'),
-        ('high_task_win', 'high_task_loss', 'high_task', 'High-High (High Cue, High Task)')
+    # Colors and styles matching the original figure
+    plot_config = [
+        # (win_cond, loss_cond, color, linestyle, linewidth, label)
+        ('low_task_win', 'low_task_loss', '#FF99CC', '-', 1.5, 'Low Task, Low Cue'),   
+        ('mid_low_task_win', 'mid_low_task_loss', '#6699FF', '--', 1.5, 'Mid Task, Low Cue'),  
+        ('mid_high_task_win', 'mid_high_task_loss', 'purple', ':', 2.0, 'Mid Task, High Cue'), 
+        ('high_task_win', 'high_task_loss', 'navy', '-', 2.0, 'High Task, High Cue')          
     ]
     
-    for win_cond, loss_cond, color_key, label in contrast_pairs:
+    print("Creating Figure 3c: Task value difference waveforms...")
+    
+    for win_cond, loss_cond, color, linestyle, linewidth, label in plot_config:
         if win_cond in grand_averages and loss_cond in grand_averages:
-            # Create difference wave
-            diff_evoked = mne.combine_evoked([grand_averages[win_cond], 
-                                            grand_averages[loss_cond]], 
+            # Create win-loss difference wave
+            win_evoked = grand_averages[win_cond].copy()
+            loss_evoked = grand_averages[loss_cond].copy()
+            
+            diff_evoked = mne.combine_evoked([win_evoked, loss_evoked], 
                                            weights=[1, -1])
             
             # Get FCz data
@@ -398,42 +426,96 @@ def create_figure_3c(grand_averages, output_dir):
                 ch_idx = diff_evoked.ch_names.index('FCz')
                 
                 # Convert to µV for plotting
-                diff_data = diff_evoked.data[ch_idx] * 1e6  # Convert V to µV
+                diff_data = diff_evoked.data[ch_idx] * 1e6
                 times = diff_evoked.times
                 
                 # Plot difference wave
                 ax.plot(times, diff_data, 
-                       color=colors[color_key], 
-                       linestyle=line_styles[color_key],
-                       linewidth=1, 
+                       color=color, 
+                       linestyle=linestyle,
+                       linewidth=linewidth, 
                        label=label,
-                       alpha=0.8)
+                       alpha=0.9)
                 
-                print(f"Plotted {label}: Range {np.min(diff_data):.1f} to {np.max(diff_data):.1f} µV")
+                print(f"  {label}: Range {np.min(diff_data):.1f} to {np.max(diff_data):.1f} µV")
     
-    # Add shaded region for analysis window (240-340ms)
-    ax.axvspan(0.240, 0.340, alpha=0.15, color='gray', 
-               label='Analysis Window (240-340ms)', zorder=0)
+    # Add shaded analysis window (240-340ms)
+    ax.axvspan(0.240, 0.340, alpha=0.2, color='lightgray', zorder=0)
     
     # Formatting to match authors
     ax.set_xlabel('Time (s)', fontsize=12)
     ax.set_ylabel('Voltage (µV)', fontsize=12)  
-    ax.set_title('FCz', fontsize=14, fontweight='bold')
+    ax.set_title('FCz', fontsize=14, fontweight='bold', pad=15)
+    
+    # Grid and axis lines
     ax.axhline(0, color='black', linewidth=0.8)
     ax.axvline(0, color='black', linewidth=0.8) 
     ax.grid(True, alpha=0.3)
-    ax.set_xlim(-0.2, 0.6)
-    ax.set_ylim(-5, 10)  # Match authors' range for difference waves
     
-    # Legend styling
-    ax.legend(fontsize=10, frameon=True, fancybox=True, shadow=True)
+    # Set limits to match authors
+    ax.set_xlim(-0.2, 0.6)
+    ax.set_ylim(-5, 10)  # Authors show -5 to 10 µV range
+    
+    # Legend positioning and styling to match authors
+    ax.legend(loc='upper right', fontsize=10, 
+              frameon=True, fancybox=True, shadow=True,
+              bbox_to_anchor=(0.98, 0.98))
+    
+    # Add tick marks and formatting
+    ax.tick_params(axis='both', which='major', labelsize=11)
     
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'figure_3c_difference_waveforms.png'), 
                 dpi=300, bbox_inches='tight')
     plt.close()
     
-    print("Figure 3c created with µV conversion")
+    print("Figure 3c created matching authors' style")
+    
+    # Also create a diagnostic plot showing individual win and loss waveforms
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    axes = axes.flatten()
+    
+    conditions = [
+        ('low_task_win', 'low_task_loss', 'Low Task, Low Cue'),
+        ('mid_low_task_win', 'mid_low_task_loss', 'Mid Task, Low Cue'), 
+        ('mid_high_task_win', 'mid_high_task_loss', 'Mid Task, High Cue'),
+        ('high_task_win', 'high_task_loss', 'High Task, High Cue')
+    ]
+    
+    for i, (win_cond, loss_cond, title) in enumerate(conditions):
+        if win_cond in grand_averages and loss_cond in grand_averages and i < 4:
+            win_evoked = grand_averages[win_cond]
+            loss_evoked = grand_averages[loss_cond]
+            
+            if 'FCz' in win_evoked.ch_names:
+                ch_idx = win_evoked.ch_names.index('FCz')
+                
+                win_data = win_evoked.data[ch_idx] * 1e6
+                loss_data = loss_evoked.data[ch_idx] * 1e6
+                diff_data = win_data - loss_data
+                
+                times = win_evoked.times
+                
+                axes[i].plot(times, win_data, 'b-', linewidth=2, label='Win', alpha=0.7)
+                axes[i].plot(times, loss_data, 'r--', linewidth=2, label='Loss', alpha=0.7)
+                axes[i].plot(times, diff_data, 'k-', linewidth=2, label='Win-Loss Diff')
+                
+                axes[i].axvspan(0.240, 0.340, alpha=0.2, color='gray')
+                axes[i].axhline(0, color='black', linewidth=0.5)
+                axes[i].axvline(0, color='black', linewidth=0.5)
+                
+                axes[i].set_xlabel('Time (s)')
+                axes[i].set_ylabel('Amplitude (µV)')
+                axes[i].set_title(title)
+                axes[i].legend()
+                axes[i].grid(True, alpha=0.3)
+                axes[i].set_xlim(-0.2, 0.6)
+    
+    plt.tight_layout()
+    plt.suptitle('Individual Win/Loss Waveforms and Differences', y=1.02)
+    plt.savefig(os.path.join(output_dir, 'figure_3c_diagnostic_waveforms.png'), 
+                dpi=300, bbox_inches='tight')
+    plt.close()
 
 def create_figure_3d(df_stats, output_dir):
     """Create Figure 3d: RewP scores by condition"""
@@ -479,7 +561,7 @@ def create_figure_3d(df_stats, output_dir):
     ax.set_ylabel('RewP Amplitude (µV)', fontsize=12)
     ax.set_title('RewP Amplitude by Condition', fontsize=14, fontweight='bold')
     ax.grid(True, alpha=0.3, axis='y')
-    ax.set_ylim(-2, 6)
+    ax.set_ylim(-10, 20)
     
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'figure_3d_rewp_scores.png'), 

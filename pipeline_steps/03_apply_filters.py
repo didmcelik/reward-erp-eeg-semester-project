@@ -13,8 +13,8 @@ OUTPUT_DIR = "../output/derivatives/manual-pipeline"
 TASK = "casinos"
 
 # Filter parameters
-L_FREQ = 0.1  # High-pass
-H_FREQ = 40.0  # Low-pass
+L_FREQ = 0.1  # Low-pass
+H_FREQ = 40.0  # High-pass
 LINE_FREQ = 50.0  # Notch filter for line noise
 RESAMPLE_FREQ = 250.0
 
@@ -76,17 +76,68 @@ def apply_zapline_filter(raw, line_freq=50.0, nremove=4):
     
     return raw_clean
 
+def add_fz_reference_site2(raw, subject_id):
+    """
+    Add Fz reference channel for site 2 subjects
+    """
+    
+    site2_subjects = ['27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38'] 
+    
+    if subject_id in site2_subjects:
+        print(f"Subject {subject_id} - adding Fz reference channel")
+        
+        # Get current data
+        data = raw.get_data()
+        n_channels, n_times = data.shape
+        
+        # Create zero-filled Fz channel
+        fz_data = np.zeros((1, n_times))
+        
+        # Concatenate Fz data
+        new_data = np.vstack([data, fz_data])
+        
+        # Create new channel info for Fz
+        fz_info = mne.create_info(['Fz'], raw.info['sfreq'], ch_types=['eeg'])
+        
+        # Create new info with additional channel
+        new_info = raw.info.copy()
+        new_info = mne.io.meas_info.create_info(
+            ch_names=raw.ch_names + ['Fz'],
+            sfreq=raw.info['sfreq'],
+            ch_types=[raw.get_channel_types()[i] for i in range(len(raw.ch_names))] + ['eeg']
+        )
+        
+        # Copy other info attributes
+        for key in ['bads', 'description', 'experimenter', 'line_freq']:
+            if key in raw.info:
+                new_info[key] = raw.info[key]
+        
+        # Create new Raw object with Fz channel
+        raw_with_fz = mne.io.RawArray(new_data, new_info)
+        
+        print(f"Added Fz reference channel (zero-filled)")
+        return raw_with_fz
+    
+    else:
+        print(f"Subject {subject_id} is not from site 2 - no Fz reference needed")
+        return raw
+
 def apply_rereferencing(raw):
     """Apply re-referencing to mastoids (TP9, TP10)"""
     
     # mastoid channels
     mastoids = ['TP9', 'TP10']
     available_mastoids = [ch for ch in mastoids if ch in raw.ch_names]
-    apply_mastoids = False
     
-    if apply_mastoids:
-        print(f"Re-referencing to mastoids: {available_mastoids}")
+    if len(available_mastoids) == 2:
+        print(f"Re-referencing to TP9 and TP10 mastoids: {available_mastoids}")
         raw.set_eeg_reference(ref_channels=available_mastoids)
+    elif 'TP9' in available_mastoids:
+        print("Re-referencing to TP9 only")
+        raw.set_eeg_reference(ref_channels=['TP9'])
+    elif 'TP10' in available_mastoids:
+        print("Re-referencing to TP10 only")
+        raw.set_eeg_reference(ref_channels=['TP10'])
     else:
         print("No mastoid channels found, using common average reference")
         raw.set_eeg_reference(ref_channels='average')
