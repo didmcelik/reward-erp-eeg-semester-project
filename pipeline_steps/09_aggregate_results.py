@@ -247,28 +247,16 @@ def create_figure_3a(grand_averages, output_dir):
     
     fig, ax = plt.subplots(1, 1, figsize=(18, 6))
     
-    # Define colors and styles matching the study
-    colors = {
-        'low_low': "#FF9B9B",      # Red for Low-Low
-        'mid_low': '#66B2FF',      # Blue for Mid-Low  
-        'mid_high': "#FB4B4B",     # Red for Mid-High
-        'high_high': '#3366FF'     # Blue for High-High
-    }
-
-    line_styles = {'win': '-', 'loss': '--'}
-    
-    # Plot conditions matching study design
-    conditions_to_plot = [
-        # LOW-VALUE CUES in different tasks:
-        ('low_task_win', 'low_task_loss', 'low_low', 'Low-Low (Low Cue, Low Task)'),
-        ('mid_low_task_win', 'mid_low_task_loss', 'mid_low', 'Mid-Low (Low Cue, Mid Task)'),
-        
-        # HIGH-VALUE CUES in different tasks:
-        ('mid_high_task_win', 'mid_high_task_loss', 'mid_high', 'Mid-High (High Cue, Mid Task)'),
-        ('high_task_win', 'high_task_loss', 'high_high', 'High-High (High Cue, High Task)')
+    # Define colors and styles as requested
+    plot_config = [
+        # (win_cond, loss_cond, win_color, loss_color, win_linestyle, loss_linestyle, label_prefix)
+        ('low_task_win', 'low_task_loss', '#fb9a99', '#a6cee3', '-', '-', 'Low-Low'),
+        ('mid_low_task_win', 'mid_low_task_loss', '#fb9a99', '#a6cee3', '--', '--', 'Mid-Low'),
+        ('mid_high_task_win', 'mid_high_task_loss', '#e31a1c', '#1f78b4', '--', '--', 'Mid-High'),
+        ('high_task_win', 'high_task_loss', '#e31a1c', '#1f78b4', ':', ':', 'High-High')
     ]
     
-    for win_cond, loss_cond, color_key, label in conditions_to_plot:
+    for win_cond, loss_cond, win_color, loss_color, win_style, loss_style, label in plot_config:
         if win_cond in grand_averages and loss_cond in grand_averages:
             win_evoked = grand_averages[win_cond]
             loss_evoked = grand_averages[loss_cond]
@@ -280,7 +268,7 @@ def create_figure_3a(grand_averages, output_dir):
                 win_data = win_evoked.data[ch_idx] 
                 loss_data = loss_evoked.data[ch_idx] 
                 
-                # Check data is reasonable (should be in V, around 1e-5 to 1e-4)
+                # Check data is reasonable (should be in V)
                 data_range = np.max(np.abs(win_data))
                 if data_range > 1e-3:  # Data is in µV, convert to V
                     win_data = win_data / 1e6
@@ -293,12 +281,11 @@ def create_figure_3a(grand_averages, output_dir):
                 
                 times = win_evoked.times
                 
-                # Plot win and loss
-                ax.plot(times, win_data_uv, color=colors[color_key], 
-                       linestyle=line_styles['win'], linewidth=1, 
+                ax.plot(times, win_data_uv, color=win_color, 
+                       linestyle=win_style, linewidth=2, 
                        label=f'{label} Win')
-                ax.plot(times, loss_data_uv, color=colors[color_key], 
-                       linestyle=line_styles['loss'], linewidth=1, alpha=0.7,
+                ax.plot(times, loss_data_uv, color=loss_color, 
+                       linestyle=loss_style, linewidth=2,
                        label=f'{label} Loss')
                 
                 print(f"Plotted {label}: Win range = {np.min(win_data_uv):.1f} to {np.max(win_data_uv):.1f} µV")
@@ -321,7 +308,7 @@ def create_figure_3a(grand_averages, output_dir):
                 dpi=300, bbox_inches='tight')
     plt.close()
     
-    print("Figure 3a created with corrected scaling")
+    print("Figure 3a created with custom color scheme")
 
 def create_figure_3b(grand_averages, output_dir):
     """Create Figure 3b: Scalp distribution of win-loss difference"""
