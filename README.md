@@ -1,4 +1,4 @@
-# EEG Semester Project — Reward ERP Dataset (ds004147)
+# 🧩 EEG Semester Project — ds004147 (Reward ERP / RewP)
 
 ## Overview
 
@@ -35,10 +35,10 @@ pip install mne mne-icalabel meegkit autoreject numpy scipy matplotlib pandas
 ```
 
 Or use the requirements file:
-
 ```bash
 pip install -r requirements.txt
 ```
+
 
 # To run the complete pipeline:
 ```bash
