@@ -9,8 +9,10 @@ import sys
 from pathlib import Path
 
 # Configuration
-SUBJECTS = ['28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38'] # List of subject IDs to process
-
+SUBJECTS = ['27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38'] # List of subject IDs to process
+            
+# learners = [4,6,7,8,10,11,13,14,15,16,17,19,21,22,23,26,27,28,31,34,35,36,37,38];
+# SUBJECTS = ['27', '28', '31', '34', '35', '36', '37', '38']
 # SUBJECTS = ['27'] # For testing, process only one subject
 
 PIPELINE_STEPS = [
