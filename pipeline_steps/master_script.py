@@ -24,7 +24,9 @@ PIPELINE_STEPS = [
     '06_remove_bad_trials.py',
     '07_create_evoked.py',
     '08_run_statistics.py',
-    '09_aggregate_results.py'
+    '09_aggregate_results.py',
+    '10_decode_task_value.py',
+    '11_decoding_group_level.py'
 ]
 
 def run_pipeline_step(script_name, subject_id):
